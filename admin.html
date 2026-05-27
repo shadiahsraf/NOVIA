@@ -10,22 +10,27 @@
 
   <!--
   ═══════════════════════════════════════════════════════════
-  IMAGE UPLOAD — HOW IT WORKS
+  IMAGE UPLOAD — CLOUDINARY (free, no Firebase Storage needed)
   ═══════════════════════════════════════════════════════════
 
-  The image section has TWO tabs:
-    1. Upload from device  → file picker → uploads to Firebase Storage
-                             → stores the public download URL in Firestore
-    2. Paste URL           → Google Drive / Unsplash / any image URL
+  SETUP (one-time, 2 minutes):
+  1. Create a free account at https://cloudinary.com
+  2. From your Cloudinary Dashboard, copy:
+       - Cloud name  (e.g. "my-novia-shop")
+  3. Create an Upload Preset (unsigned):
+       Cloudinary Dashboard → Settings → Upload → Upload presets
+       → Add upload preset → Signing mode: "Unsigned" → Save
+       Copy the preset name (e.g. "novia_products")
+  4. Paste both values in the CLOUDINARY CONFIG section below
 
-  Firebase Storage rules required (storage.rules):
-    match /products/{file} {
-      allow read:  if true;
-      allow write: if request.auth != null;
-    }
+  FREE TIER: 25 GB storage + 25 GB bandwidth/month — more than
+  enough for a bridal shop with hundreds of products.
 
-  Make sure Firebase Storage is enabled in your project:
-    Firebase Console → Build → Storage → Get started
+  HOW IT WORKS:
+  - Image is uploaded directly from the browser to Cloudinary
+  - Cloudinary returns a permanent public URL
+  - That URL is saved in Firestore (same as before)
+  - No Firebase Storage, no billing upgrade needed
   ═══════════════════════════════════════════════════════════
   -->
 
@@ -49,7 +54,7 @@
     }
     body { background: var(--cream); color: var(--charcoal); font-family: var(--sans); font-weight: 300; min-height: 100vh; }
 
-    /* Both screens hidden — JS reveals the right one after auth check */
+    /* Screens hidden — JS reveals after auth */
     #login-screen { display: none; }
     #admin-screen { display: none; }
 
@@ -60,129 +65,73 @@
     .btn-logout { font-size: 0.6rem; letter-spacing: 0.15em; text-transform: uppercase; color: rgba(255,255,255,0.5); background: none; border: 1px solid rgba(255,255,255,0.2); padding: 0.5rem 1rem; cursor: pointer; transition: all 0.2s; }
     .btn-logout:hover { color: #fff; border-color: rgba(255,255,255,0.5); }
 
-    /* ── Login Screen ── */
-    #login-screen {
-      min-height: 100vh;
-      align-items: center; justify-content: center;
-      background: linear-gradient(135deg, #2a1a14 0%, #4a2a1e 100%);
-    }
+    /* ── Login ── */
+    #login-screen { min-height: 100vh; align-items: center; justify-content: center; background: linear-gradient(135deg, #2a1a14 0%, #4a2a1e 100%); }
     .login-card { background: var(--ivory); padding: 3.5rem; width: min(420px, 92vw); }
     .login-logo { font-family: var(--serif); font-size: 2.5rem; font-weight: 300; letter-spacing: 0.2em; color: var(--black); margin-bottom: 0.4rem; text-align: center; }
     .login-sub { font-size: 0.6rem; letter-spacing: 0.3em; text-transform: uppercase; color: var(--rose); text-align: center; margin-bottom: 2.5rem; }
     .login-divider { width: 50px; height: 1px; background: linear-gradient(to right, var(--champagne-deep), var(--rose)); margin: 0 auto 2.5rem; }
 
-    /* ── Form Shared ── */
+    /* ── Forms ── */
     .form-group { margin-bottom: 1.4rem; }
     .form-label { display: block; font-size: 0.6rem; letter-spacing: 0.2em; text-transform: uppercase; color: var(--warm-gray); margin-bottom: 0.5rem; }
-    .form-input, .form-select, .form-textarea {
-      width: 100%; font-family: var(--sans); font-size: 0.85rem; font-weight: 300;
-      color: var(--charcoal); background: #fff;
-      border: 1px solid var(--blush); padding: 0.8rem 1rem;
-      outline: none; transition: border-color 0.2s ease; appearance: none;
-    }
+    .form-input, .form-select, .form-textarea { width: 100%; font-family: var(--sans); font-size: 0.85rem; font-weight: 300; color: var(--charcoal); background: #fff; border: 1px solid var(--blush); padding: 0.8rem 1rem; outline: none; transition: border-color 0.2s ease; appearance: none; }
     .form-input:focus, .form-select:focus, .form-textarea:focus { border-color: var(--rose); }
     .form-textarea { resize: vertical; min-height: 90px; }
     .form-hint { font-size: 0.65rem; color: var(--warm-gray); margin-top: 0.35rem; line-height: 1.6; }
     .form-input.invalid { border-color: var(--error); }
     .field-error { font-size: 0.65rem; color: var(--error); margin-top: 0.3rem; display: none; }
     .field-error.visible { display: block; }
-
-    .btn-submit {
-      width: 100%; font-size: 0.65rem; font-weight: 300;
-      letter-spacing: 0.25em; text-transform: uppercase; color: #fff;
-      background: linear-gradient(135deg, var(--champagne-deep), var(--rose));
-      border: none; padding: 1rem; cursor: pointer; transition: opacity 0.25s ease;
-    }
+    .btn-submit { width: 100%; font-size: 0.65rem; font-weight: 300; letter-spacing: 0.25em; text-transform: uppercase; color: #fff; background: linear-gradient(135deg, var(--champagne-deep), var(--rose)); border: none; padding: 1rem; cursor: pointer; transition: opacity 0.25s ease; }
     .btn-submit:hover { opacity: 0.88; }
     .btn-submit:disabled { opacity: 0.45; cursor: not-allowed; }
 
-    /* ── Image Section — tabs ── */
-    .img-tabs {
-      display: flex;
-      border-bottom: 1px solid var(--blush);
-      margin-bottom: 1rem;
-    }
-    .img-tab {
-      font-size: 0.6rem; font-weight: 300; letter-spacing: 0.15em;
-      text-transform: uppercase; color: var(--warm-gray);
-      background: none; border: none; border-bottom: 2px solid transparent;
-      padding: 0.5rem 1rem 0.6rem; cursor: pointer;
-      margin-bottom: -1px;
-      transition: color 0.2s, border-color 0.2s;
-    }
+    /* ── Image tabs ── */
+    .img-tabs { display: flex; border-bottom: 1px solid var(--blush); margin-bottom: 1rem; }
+    .img-tab { font-size: 0.6rem; font-weight: 300; letter-spacing: 0.15em; text-transform: uppercase; color: var(--warm-gray); background: none; border: none; border-bottom: 2px solid transparent; padding: 0.5rem 1rem 0.6rem; cursor: pointer; margin-bottom: -1px; transition: color 0.2s, border-color 0.2s; }
     .img-tab.active { color: var(--rose); border-bottom-color: var(--rose); }
     .img-panel { display: none; }
     .img-panel.active { display: block; }
 
     /* ── Drop zone ── */
-    .drop-zone {
-      border: 1.5px dashed var(--blush);
-      padding: 2rem 1rem;
-      text-align: center;
-      cursor: pointer;
-      transition: border-color 0.2s, background 0.2s;
-      position: relative;
-    }
-    .drop-zone:hover, .drop-zone.drag-over {
-      border-color: var(--rose);
-      background: var(--rose-pale);
-    }
-    .drop-zone input[type="file"] {
-      position: absolute; inset: 0; opacity: 0;
-      cursor: pointer; width: 100%; height: 100%;
-    }
+    .drop-zone { border: 1.5px dashed var(--blush); padding: 2rem 1rem; text-align: center; cursor: pointer; transition: border-color 0.2s, background 0.2s; position: relative; }
+    .drop-zone:hover, .drop-zone.drag-over { border-color: var(--rose); background: var(--rose-pale); }
+    .drop-zone input[type="file"] { position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%; }
     .drop-icon { font-size: 1.8rem; margin-bottom: 0.5rem; opacity: 0.35; }
     .drop-label { font-size: 0.75rem; color: var(--warm-gray); line-height: 1.7; }
     .drop-label strong { color: var(--rose); font-weight: 400; }
+    .drop-filename { font-size: 0.7rem; color: var(--champagne-deep); margin-top: 0.4rem; font-style: italic; }
 
-    /* ── Upload progress bar ── */
+    /* ── Cloudinary config warning ── */
+    .config-warn { background: #fdf0ee; border: 1px solid #e8a090; padding: 0.8rem 1rem; font-size: 0.72rem; color: #a03020; line-height: 1.6; margin-bottom: 0.8rem; display: none; }
+    .config-warn.visible { display: block; }
+    .config-warn a { color: inherit; }
+
+    /* ── Progress bar ── */
     .upload-progress { margin-top: 0.8rem; display: none; }
     .upload-progress.visible { display: block; }
-    .progress-track {
-      width: 100%; height: 3px;
-      background: var(--blush); border-radius: 2px; overflow: hidden;
-    }
-    .progress-fill {
-      height: 100%; width: 0%;
-      background: linear-gradient(90deg, var(--champagne-deep), var(--rose));
-      border-radius: 2px;
-      transition: width 0.2s ease;
-    }
-    .progress-label {
-      font-size: 0.6rem; color: var(--warm-gray);
-      letter-spacing: 0.1em; margin-top: 0.4rem;
-      text-align: center;
-    }
+    .progress-track { width: 100%; height: 3px; background: var(--blush); border-radius: 2px; overflow: hidden; }
+    .progress-fill { height: 100%; width: 0%; background: linear-gradient(90deg, var(--champagne-deep), var(--rose)); border-radius: 2px; transition: width 0.15s ease; }
+    .progress-label { font-size: 0.6rem; color: var(--warm-gray); letter-spacing: 0.1em; margin-top: 0.4rem; text-align: center; }
 
-    /* ── Image preview (shared between tabs) ── */
-    .img-preview {
-      width: 100%; aspect-ratio: 4/3; object-fit: cover;
-      display: none; margin-top: 0.8rem;
-      border: 1px solid var(--blush);
-    }
+    /* ── Image preview ── */
+    .img-preview { width: 100%; aspect-ratio: 4/3; object-fit: cover; display: none; margin-top: 0.8rem; border: 1px solid var(--blush); }
     .img-preview.visible { display: block; }
 
     /* ── Toast ── */
-    #toast {
-      position: fixed; bottom: 2rem; left: 50%; transform: translateX(-50%);
-      background: var(--black); color: #fff;
-      font-size: 0.75rem; letter-spacing: 0.1em;
-      padding: 0.9rem 2rem; opacity: 0; pointer-events: none;
-      transition: opacity 0.3s ease; z-index: 999; white-space: nowrap;
-    }
+    #toast { position: fixed; bottom: 2rem; left: 50%; transform: translateX(-50%); background: var(--black); color: #fff; font-size: 0.75rem; letter-spacing: 0.1em; padding: 0.9rem 2rem; opacity: 0; pointer-events: none; transition: opacity 0.3s ease; z-index: 999; white-space: nowrap; }
     #toast.show { opacity: 1; }
     #toast.success { background: var(--success); }
     #toast.error   { background: var(--error); }
 
-    /* ── Admin Layout ── */
-    #admin-screen { display: none; }
+    /* ── Admin layout ── */
     .admin-layout { display: grid; grid-template-columns: 400px 1fr; gap: 2rem; max-width: 1300px; margin: 2rem auto; padding: 0 2rem; }
     .admin-card { background: var(--ivory); padding: 2.5rem; height: fit-content; position: sticky; top: 2rem; }
     .admin-card-title { font-family: var(--serif); font-size: 1.6rem; font-weight: 300; color: var(--black); margin-bottom: 0.4rem; }
     .admin-card-sub { font-size: 0.6rem; letter-spacing: 0.2em; text-transform: uppercase; color: var(--rose); margin-bottom: 1.5rem; }
     .admin-divider { width: 40px; height: 1px; background: linear-gradient(to right, var(--champagne-deep), var(--rose)); margin-bottom: 2rem; }
 
-    /* ── Product List ── */
+    /* ── Product list ── */
     .product-list-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 1.5rem; }
     .product-list-title { font-family: var(--serif); font-size: 1.6rem; font-weight: 300; color: var(--black); }
     .product-count { font-size: 0.6rem; letter-spacing: 0.2em; text-transform: uppercase; color: var(--warm-gray); }
@@ -209,15 +158,12 @@
 
 <div id="toast" role="alert" aria-live="polite"></div>
 
-<!-- ══════════════════════════════════
-     LOGIN SCREEN
-══════════════════════════════════ -->
+<!-- ── LOGIN ── -->
 <div id="login-screen">
   <div class="login-card">
     <div class="login-logo">NOVIA</div>
     <p class="login-sub">Admin Panel</p>
     <div class="login-divider"></div>
-
     <div class="form-group">
       <label class="form-label" for="login-email">Email</label>
       <input class="form-input" type="email" id="login-email" placeholder="admin@novia.com" autocomplete="email" />
@@ -233,9 +179,7 @@
   </div>
 </div>
 
-<!-- ══════════════════════════════════
-     ADMIN SCREEN
-══════════════════════════════════ -->
+<!-- ── ADMIN ── -->
 <div id="admin-screen">
   <div class="admin-bar">
     <a href="index.html" class="admin-bar-logo">NOVIA</a>
@@ -245,7 +189,7 @@
 
   <div class="admin-layout">
 
-    <!-- ── Add Product Form ── -->
+    <!-- Add product form -->
     <div class="admin-card">
       <div class="admin-card-title">Add Product</div>
       <div class="admin-card-sub">New Collection Item</div>
@@ -280,29 +224,36 @@
           <textarea class="form-textarea" id="p-desc" placeholder="A short elegant description…"></textarea>
         </div>
 
-        <!-- ── Image — two tabs: Upload or URL ── -->
+        <!-- Image section -->
         <div class="form-group">
           <label class="form-label">Product Image</label>
 
+          <!-- Tab switcher -->
           <div class="img-tabs">
-            <button type="button" class="img-tab active" id="tab-upload" onclick="switchTab('upload')">
-              Upload from device
-            </button>
-            <button type="button" class="img-tab" id="tab-url" onclick="switchTab('url')">
-              Paste URL
-            </button>
+            <button type="button" class="img-tab active" id="tab-upload" onclick="switchTab('upload')">Upload from device</button>
+            <button type="button" class="img-tab" id="tab-url" onclick="switchTab('url')">Paste URL</button>
           </div>
 
-          <!-- Tab 1: Device upload -->
+          <!-- Tab: device upload via Cloudinary -->
           <div class="img-panel active" id="panel-upload">
+
+            <!-- Shown when Cloudinary isn't configured yet -->
+            <div class="config-warn" id="cloudinary-warn">
+              Cloudinary is not configured. Open admin.html and fill in your
+              <strong>CLOUDINARY_CLOUD_NAME</strong> and <strong>CLOUDINARY_UPLOAD_PRESET</strong>.
+              <a href="https://cloudinary.com" target="_blank">Create free account →</a>
+            </div>
+
             <div class="drop-zone" id="drop-zone">
-              <input type="file" id="p-file" accept="image/*" />
+              <input type="file" id="p-file" accept="image/jpeg,image/png,image/webp,image/gif" />
               <div class="drop-icon">📁</div>
               <div class="drop-label">
                 <strong>Click to choose</strong> or drag & drop<br>
-                JPG, PNG, WEBP — max 5 MB
+                JPG, PNG, WEBP — max 10 MB
               </div>
+              <div class="drop-filename" id="drop-filename"></div>
             </div>
+
             <!-- Upload progress -->
             <div class="upload-progress" id="upload-progress">
               <div class="progress-track">
@@ -312,23 +263,21 @@
             </div>
           </div>
 
-          <!-- Tab 2: URL paste -->
+          <!-- Tab: URL paste -->
           <div class="img-panel" id="panel-url">
-            <input class="form-input" type="url" id="p-image" placeholder="https://… or Google Drive share link" />
-            <p class="form-hint">
-              For Google Drive: set file to "Anyone with the link → Viewer", then paste the share URL.
-            </p>
+            <input class="form-input" type="url" id="p-image" placeholder="https://… or any image URL" />
+            <p class="form-hint">Paste any direct image URL (Unsplash, your website, etc.)</p>
           </div>
 
-          <!-- Shared preview — shown whichever tab is active -->
-          <img id="img-preview" class="img-preview" alt="Image preview" />
+          <!-- Shared preview -->
+          <img id="img-preview" class="img-preview" alt="Product image preview" />
         </div>
 
         <button class="btn-submit" type="submit" id="submit-btn">Add Product</button>
       </form>
     </div>
 
-    <!-- ── Product List ── -->
+    <!-- Product list -->
     <div>
       <div class="product-list-header">
         <h2 class="product-list-title">All Products</h2>
@@ -344,20 +293,28 @@
   </div>
 </div>
 
-<!-- ════════════════════════════════════════════════════════════
-     FIREBASE
-     ── Your real config is already pasted below ──
-════════════════════════════════════════════════════════════ -->
 <script type="module">
+  /* ════════════════════════════════════════════════════════════
+     CLOUDINARY CONFIG
+     ════════════════════════════════════════════════════════════
+     1. Sign up free at https://cloudinary.com
+     2. Dashboard → copy your Cloud name
+     3. Settings → Upload → Upload presets → Add preset
+        Set Signing mode to "Unsigned" → Save → copy preset name
+     4. Paste both values below
+  ════════════════════════════════════════════════════════════ */
+  const CLOUDINARY_CLOUD_NAME   = 'dzgqrtukw';   // e.g. 'my-novia-shop'
+  const CLOUDINARY_UPLOAD_PRESET = 'noviaaa'; // e.g. 'novia_products'
+
+  /* ════════════════════════════════════════════════════════════
+     FIREBASE CONFIG
+  ════════════════════════════════════════════════════════════ */
   import { initializeApp }       from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
   import { getFirestore, collection, getDocs, addDoc, deleteDoc, doc, serverTimestamp, orderBy, query }
                                   from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
   import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged }
                                   from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
-  import { getStorage, ref, uploadBytesResumable, getDownloadURL, deleteObject }
-                                  from "https://www.gstatic.com/firebasejs/10.12.2/firebase-storage.js";
 
-  /* ── Firebase config ─────────────────────────────────────── */
   const firebaseConfig = {
     apiKey:            "AIzaSyCt7YDqTI9jxtO_ZSn-aVx9bgeYfxEQAzM",
     authDomain:        "novia-a73a0.firebaseapp.com",
@@ -367,171 +324,185 @@
     appId:             "1:966486124513:web:0da547b098bbe76b7094a0"
   };
 
-  const app     = initializeApp(firebaseConfig);
-  const db      = getFirestore(app);
-  const auth    = getAuth(app);
-  const storage = getStorage(app);
+  const app  = initializeApp(firebaseConfig);
+  const db   = getFirestore(app);
+  const auth = getAuth(app);
 
   const CAT_LABEL = { bouquets:"Bouquets", gifts:"Gifts", accessories:"Accessories" };
 
-  /* ── Google Drive URL converter ──────────────────────────────
-     Converts share links to direct embeddable thumbnail URLs.
-     Uses thumbnail endpoint — more reliable than uc?export=view.
-  ──────────────────────────────────────────────────────────── */
-  function driveUrl(url) {
-    if (!url) return '';
-    const m = url.match(/(?:\/d\/|id=)([a-zA-Z0-9_-]{25,})/);
-    return m ? `https://drive.google.com/thumbnail?id=${m[1]}&sz=w800` : url;
-  }
-
-  /* ── Toast ───────────────────────────────────────────────── */
+  /* ── Helpers ─────────────────────────────────────────────── */
   function toast(msg, type = '') {
     const t = document.getElementById('toast');
-    t.textContent = msg; t.className = `show ${type}`;
+    t.textContent = msg;
+    t.className   = `show ${type}`;
     setTimeout(() => { t.className = ''; }, 3500);
   }
 
-  /* ── Image source tracking ───────────────────────────────────
-     activeImageUrl: the final URL to save in Firestore.
-     Set either by Storage upload or by URL tab input.
-  ──────────────────────────────────────────────────────────── */
-  let activeImageUrl = '';
-
-  const imgPreview     = document.getElementById('img-preview');
-  const progressWrap   = document.getElementById('upload-progress');
-  const progressFill   = document.getElementById('progress-fill');
-  const progressLabel  = document.getElementById('progress-label');
+  const imgPreview    = document.getElementById('img-preview');
+  const progressWrap  = document.getElementById('upload-progress');
+  const progressFill  = document.getElementById('progress-fill');
+  const progressLabel = document.getElementById('progress-label');
 
   function showPreview(url) {
-    if (!url) { imgPreview.classList.remove('visible'); return; }
+    if (!url) { imgPreview.classList.remove('visible'); imgPreview.src = ''; return; }
     imgPreview.src = url;
     imgPreview.classList.add('visible');
     imgPreview.onerror = () => imgPreview.classList.remove('visible');
   }
 
-  /* ── Tab switching ───────────────────────────────────────── */
+  /* ── Active image URL ────────────────────────────────────────
+     Set by either the Cloudinary upload or the URL paste tab.
+  ──────────────────────────────────────────────────────────── */
+  let activeImageUrl = '';
+
+  /* ── Tab switcher ────────────────────────────────────────── */
   window.switchTab = function(tab) {
     document.getElementById('tab-upload').classList.toggle('active', tab === 'upload');
     document.getElementById('tab-url').classList.toggle('active', tab === 'url');
     document.getElementById('panel-upload').classList.toggle('active', tab === 'upload');
     document.getElementById('panel-url').classList.toggle('active', tab === 'url');
-    // Clear the other tab's value when switching
-    if (tab === 'upload') document.getElementById('p-image').value = '';
-    else {
-      document.getElementById('p-file').value = '';
-      progressWrap.classList.remove('visible');
-    }
     activeImageUrl = '';
     showPreview('');
+    if (tab === 'upload') {
+      document.getElementById('p-image').value = '';
+    } else {
+      document.getElementById('p-file').value = '';
+      document.getElementById('drop-filename').textContent = '';
+      progressWrap.classList.remove('visible');
+    }
   };
 
+  /* ── Show config warning if Cloudinary not set up yet ────── */
+  if (CLOUDINARY_CLOUD_NAME === 'YOUR_CLOUD_NAME') {
+    document.getElementById('cloudinary-warn').classList.add('visible');
+  }
+
   /* ════════════════════════════════════════════════════════════
-     DEVICE UPLOAD — Firebase Storage
+     CLOUDINARY UPLOAD
      ──────────────────────────────────────────────────────────
+     Uses XMLHttpRequest (not fetch) so we get real upload
+     progress events → the progress bar moves smoothly.
+
      Flow:
-       1. User picks a file (file input or drag & drop)
-       2. File is validated (type + size)
-       3. Uploaded to Firebase Storage at products/{timestamp}_{filename}
-       4. Upload progress shown on the progress bar
-       5. On success → getDownloadURL() → stored as activeImageUrl
-       6. On form submit → activeImageUrl saved to Firestore
+       1. User picks a file
+       2. File validated (type + size)
+       3. POST to Cloudinary upload API with the unsigned preset
+       4. XHR progress events → progress bar fills in real-time
+       5. On success → permanent CDN URL saved as activeImageUrl
+       6. On form submit → activeImageUrl stored in Firestore
   ════════════════════════════════════════════════════════════ */
   const fileInput = document.getElementById('p-file');
   const dropZone  = document.getElementById('drop-zone');
 
-  // Handle file selection (both click-to-browse and drop)
   fileInput.addEventListener('change', () => {
     if (fileInput.files[0]) handleFile(fileInput.files[0]);
   });
 
-  // Drag & drop events
   dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('drag-over'); });
   dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
   dropZone.addEventListener('drop', e => {
     e.preventDefault();
     dropZone.classList.remove('drag-over');
-    const file = e.dataTransfer.files[0];
-    if (file) handleFile(file);
+    if (e.dataTransfer.files[0]) handleFile(e.dataTransfer.files[0]);
   });
 
   function handleFile(file) {
     /* Validate type */
-    if (!file.type.startsWith('image/')) {
-      toast('Please select an image file (JPG, PNG, WEBP…)', 'error');
+    const allowed = ['image/jpeg','image/png','image/webp','image/gif'];
+    if (!allowed.includes(file.type)) {
+      toast('Please choose a JPG, PNG, or WEBP image.', 'error');
       return;
     }
-    /* Validate size — 5 MB max */
-    if (file.size > 5 * 1024 * 1024) {
-      toast('Image is too large. Please use a file under 5 MB.', 'error');
+    /* Validate size — 10 MB max */
+    if (file.size > 10 * 1024 * 1024) {
+      toast('Image too large — please use a file under 10 MB.', 'error');
       return;
     }
 
-    /* Show local preview instantly while upload runs */
-    const localUrl = URL.createObjectURL(file);
-    showPreview(localUrl);
+    /* Show filename and local preview immediately */
+    document.getElementById('drop-filename').textContent = file.name;
+    showPreview(URL.createObjectURL(file));
 
-    /* Upload to Firebase Storage */
-    uploadToStorage(file);
+    /* Check Cloudinary is configured */
+    if (CLOUDINARY_CLOUD_NAME === 'YOUR_CLOUD_NAME') {
+      toast('Fill in your Cloudinary config in admin.html first.', 'error');
+      return;
+    }
+
+    uploadToCloudinary(file);
   }
 
-  function uploadToStorage(file) {
-    /* Unique filename: timestamp + sanitised original name */
-    const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
-    const path     = `products/${Date.now()}_${safeName}`;
-    const storageRef = ref(storage, path);
-    const uploadTask = uploadBytesResumable(storageRef, file);
+  function uploadToCloudinary(file) {
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('upload_preset', CLOUDINARY_UPLOAD_PRESET);
+    /* Optional: organise into a folder */
+    formData.append('folder', 'novia-products');
+
+    const url = `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/image/upload`;
+
+    /* Use XHR so we get upload progress events */
+    const xhr = new XMLHttpRequest();
 
     /* Show progress bar */
     progressWrap.classList.add('visible');
     progressFill.style.width = '0%';
-    progressLabel.textContent = 'Uploading…';
+    progressLabel.textContent = 'Uploading… 0%';
 
-    uploadTask.on(
-      'state_changed',
-
-      /* Progress snapshot */
-      snapshot => {
-        const pct = Math.round((snapshot.bytesTransferred / snapshot.totalBytes) * 100);
+    /* ── Progress ── */
+    xhr.upload.addEventListener('progress', e => {
+      if (e.lengthComputable) {
+        const pct = Math.round((e.loaded / e.total) * 100);
         progressFill.style.width = pct + '%';
         progressLabel.textContent = `Uploading… ${pct}%`;
-      },
+      }
+    });
 
-      /* Error */
-      err => {
-        progressWrap.classList.remove('visible');
-        activeImageUrl = '';
-        if (err.code === 'storage/unauthorized') {
-          toast('Upload failed: permission denied. Check Firebase Storage rules.', 'error');
-          console.error('[NOVIA] Storage rules blocked upload. Add storage.rules to Firebase.');
-        } else {
-          toast('Upload failed: ' + err.message, 'error');
-        }
-      },
-
-      /* Success */
-      async () => {
-        const downloadUrl = await getDownloadURL(uploadTask.snapshot.ref);
-        activeImageUrl = downloadUrl;
+    /* ── Success ── */
+    xhr.addEventListener('load', () => {
+      if (xhr.status === 200) {
+        const res = JSON.parse(xhr.responseText);
+        /* Use the secure_url — permanent, CDN-delivered, no auth needed */
+        activeImageUrl = res.secure_url;
         progressFill.style.width  = '100%';
         progressLabel.textContent = 'Upload complete ✓';
-        /* Replace blob preview with the permanent Storage URL */
-        showPreview(downloadUrl);
+        /* Swap local blob URL for the real Cloudinary URL */
+        showPreview(activeImageUrl);
         setTimeout(() => progressWrap.classList.remove('visible'), 2000);
+      } else {
+        /* Upload failed — parse Cloudinary error message */
+        let errMsg = 'Upload failed.';
+        try {
+          const res = JSON.parse(xhr.responseText);
+          errMsg = res.error?.message || errMsg;
+        } catch(_) {}
+        progressWrap.classList.remove('visible');
+        activeImageUrl = '';
+        toast(errMsg, 'error');
+        console.error('[NOVIA] Cloudinary error:', xhr.responseText);
       }
-    );
+    });
+
+    /* ── Network error ── */
+    xhr.addEventListener('error', () => {
+      progressWrap.classList.remove('visible');
+      activeImageUrl = '';
+      toast('Network error — could not reach Cloudinary. Check your connection.', 'error');
+    });
+
+    xhr.open('POST', url);
+    xhr.send(formData);
   }
 
-  /* ── URL tab — live preview + driveUrl conversion ─────────── */
+  /* ── URL tab live preview ──────────────────────────────────── */
   document.getElementById('p-image').addEventListener('input', function() {
-    const raw = this.value.trim();
-    const url = driveUrl(raw) || raw;
-    activeImageUrl = url;
-    showPreview(url);
+    activeImageUrl = this.value.trim();
+    showPreview(activeImageUrl);
   });
 
-  /* ══════════════════════════════════════════════════════════
-     AUTH STATE
-  ══════════════════════════════════════════════════════════ */
+  /* ════════════════════════════════════════════════════════════
+     AUTH
+  ════════════════════════════════════════════════════════════ */
   const loginScreen = document.getElementById('login-screen');
   const adminScreen = document.getElementById('admin-screen');
 
@@ -570,7 +541,7 @@
       await signInWithEmailAndPassword(auth, emailEl.value.trim(), passEl.value);
     } catch (err) {
       const MSGS = {
-        'auth/invalid-credential':      'Incorrect email or password.',
+        'auth/invalid-credential':     'Incorrect email or password.',
         'auth/user-not-found':          'No account found with this email.',
         'auth/wrong-password':          'Incorrect password.',
         'auth/too-many-requests':       'Too many failed attempts. Please wait.',
@@ -593,12 +564,9 @@
     toast('Signed out.');
   });
 
-  /* ══════════════════════════════════════════════════════════
+  /* ════════════════════════════════════════════════════════════
      ADD PRODUCT
-     ──────────────────────────────────────────────────────────
-     activeImageUrl is set either by the Storage upload callback
-     or by the URL tab's input handler — whichever tab is active.
-  ══════════════════════════════════════════════════════════ */
+  ════════════════════════════════════════════════════════════ */
   document.getElementById('product-form').addEventListener('submit', async e => {
     e.preventDefault();
 
@@ -621,9 +589,10 @@
     if (!category) { catEl.classList.add('invalid');  catErr.classList.add('visible');  valid = false; }
     if (!valid) return;
 
-    /* Warn if upload is still in progress */
-    const uploadActive = progressWrap.classList.contains('visible') && progressFill.style.width !== '100%';
-    if (uploadActive) {
+    /* Block submit if upload is still running */
+    const isUploading = progressWrap.classList.contains('visible')
+                        && progressLabel.textContent.includes('Uploading');
+    if (isUploading) {
       toast('Please wait — image is still uploading…', 'error');
       return;
     }
@@ -639,12 +608,13 @@
 
       toast('Product added successfully!', 'success');
 
-      /* Reset everything */
+      /* Full reset */
       document.getElementById('product-form').reset();
       activeImageUrl = '';
       showPreview('');
       progressWrap.classList.remove('visible');
-      switchTab('upload'); // return to upload tab
+      document.getElementById('drop-filename').textContent = '';
+      switchTab('upload');
 
       loadProducts();
 
@@ -660,9 +630,9 @@
     }
   });
 
-  /* ══════════════════════════════════════════════════════════
-     LOAD PRODUCTS LIST
-  ══════════════════════════════════════════════════════════ */
+  /* ════════════════════════════════════════════════════════════
+     LOAD PRODUCTS
+  ════════════════════════════════════════════════════════════ */
   const listEl  = document.getElementById('product-list');
   const countEl = document.getElementById('product-count');
 
@@ -691,8 +661,7 @@
             <span class="product-row-cat">${CAT_LABEL[p.category] || p.category}</span>
           </div>
           <button class="btn-delete" aria-label="Delete ${p.name}">Delete</button>`;
-
-        row.querySelector('.btn-delete').addEventListener('click', () => deleteProduct(p.id, p.name, p.image));
+        row.querySelector('.btn-delete').addEventListener('click', () => deleteProduct(p.id, p.name));
         listEl.appendChild(row);
       });
 
@@ -706,31 +675,15 @@
     }
   }
 
-  /* ══════════════════════════════════════════════════════════
+  /* ════════════════════════════════════════════════════════════
      DELETE PRODUCT
-     Also removes the image from Firebase Storage if it was
-     uploaded there (identified by firebasestorage.googleapis.com)
-  ══════════════════════════════════════════════════════════ */
-  async function deleteProduct(id, name, imageUrl) {
+  ════════════════════════════════════════════════════════════ */
+  async function deleteProduct(id, name) {
     if (!confirm(`Delete "${name}"?\nThis cannot be undone.`)) return;
     try {
-      /* Delete Firestore document */
       await deleteDoc(doc(db, 'products', id));
-
-      /* If image is in Firebase Storage, delete it too (clean up) */
-      if (imageUrl && imageUrl.includes('firebasestorage.googleapis.com')) {
-        try {
-          const imgRef = ref(storage, imageUrl);
-          await deleteObject(imgRef);
-        } catch (storageErr) {
-          /* Storage delete failure is non-fatal — Firestore doc is already gone */
-          console.warn('[NOVIA] Could not delete storage image:', storageErr.message);
-        }
-      }
-
       toast(`"${name}" deleted.`);
       loadProducts();
-
     } catch (err) {
       toast(
         err.code === 'permission-denied'
