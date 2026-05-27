@@ -109,25 +109,30 @@
     .nav-hamburger {
       display: none; flex-direction: column;
       justify-content: center; align-items: center;
-      gap: 5px; cursor: pointer;
+      gap: 6px; cursor: pointer;
       background: none; border: none;
-      /* Large tap target */
       width: var(--tap-min); height: var(--tap-min);
-      padding: 0; z-index: 601;
-      /* Always on top of everything */
+      padding: 0;
+      /* z-index above sidebar overlay so it stays tappable */
+      z-index: 602;
       position: relative;
+      /* Prevent iOS from treating as non-interactive */
+      -webkit-appearance: none;
     }
     .nav-hamburger span {
-      display: block; width: 24px; height: 1.5px;
-      background: var(--charcoal);
-      transition: transform 0.35s ease, opacity 0.35s ease;
+      display: block; width: 26px; height: 2px;
+      border-radius: 2px;
+      /* Default: white (shown on dark hero) */
+      background: #fff;
+      transition: transform 0.35s ease, opacity 0.35s ease, background 0.3s ease;
       pointer-events: none;
     }
-    nav.hero-nav .nav-hamburger span { background: #fff; }
+    /* When navbar has scrolled (light bg) — dark lines */
     nav.scrolled .nav-hamburger span { background: var(--charcoal); }
-    .nav-hamburger.open span:nth-child(1) { transform: translateY(6.5px) rotate(45deg); }
+    /* Animate to X when open */
+    .nav-hamburger.open span:nth-child(1) { transform: translateY(8px) rotate(45deg); }
     .nav-hamburger.open span:nth-child(2) { opacity: 0; transform: scaleX(0); }
-    .nav-hamburger.open span:nth-child(3) { transform: translateY(-6.5px) rotate(-45deg); }
+    .nav-hamburger.open span:nth-child(3) { transform: translateY(-8px) rotate(-45deg); }
 
     /* ══════════════════════════════════════════════════════════
        MOBILE SIDEBAR
@@ -471,8 +476,11 @@
     /* ══════════════════════════════════════════════════════════
        SCROLL FADE-IN
     ══════════════════════════════════════════════════════════ */
-    .fade-in { opacity: 0; transform: translateY(20px); transition: opacity 0.65s ease, transform 0.65s ease; }
-    .fade-in.visible { opacity: 1; transform: translateY(0); }
+    /* ── Scroll Fade-in ── */
+    /* Fallback: after 3.5s content always becomes visible even if observer misses it */
+    .fade-in { opacity: 0; transform: translateY(20px); transition: opacity 0.65s ease, transform 0.65s ease; animation: fadeInFallback 0s ease 3.5s forwards; }
+    @keyframes fadeInFallback { to { opacity: 1; transform: none; } }
+    .fade-in.visible { opacity: 1 !important; transform: translateY(0) !important; animation: none; }
 
     /* ══════════════════════════════════════════════════════════
        RESPONSIVE — TABLET (≤1100px)
@@ -484,81 +492,93 @@
 
     /* ══════════════════════════════════════════════════════════
        RESPONSIVE — MOBILE (≤768px)
-       All mobile fixes concentrated here
     ══════════════════════════════════════════════════════════ */
     @media (max-width: 768px) {
-      /* Nav */
-      nav { padding: 0 1.25rem; height: 60px; }
-      nav.scrolled { padding: 0 1.25rem; }
-      .nav-links, .nav-whatsapp { display: none; }
-      .nav-hamburger { display: flex; }
+      /* Nav — fixed height so logo + hamburger always visible */
+      nav {
+        padding: 0 1.25rem;
+        height: 60px;
+        /* Ensure nav background doesn't hide hamburger */
+        background: transparent;
+      }
+      nav.scrolled { padding: 0 1.25rem; background: rgba(253,246,240,0.97); }
+      /* Hide desktop links */
+      .nav-links, .nav-whatsapp { display: none !important; }
+      /* Show hamburger — use !important to override the display:none default */
+      .nav-hamburger { display: flex !important; }
 
       /* Sidebar */
       .sidebar-overlay { display: block; }
 
-      /* Sections */
-      section { padding: 4rem 1.25rem; }
-      #testimonials { padding: 4rem 1.25rem; }
-      footer { padding: 3.5rem 1.25rem 2rem; }
+      /* Sections — smaller padding on mobile */
+      section { padding: 3.5rem 1.25rem; }
+      #testimonials { padding: 3.5rem 1.25rem; }
+      footer { padding: 3rem 1.25rem 2rem; }
 
       /* Hero */
-      #hero { padding: 1.25rem; min-height: 100svh; }
-      .hero-subtitle { letter-spacing: 0.25em; }
+      #hero { padding: 1.25rem; }
+      .hero-subtitle { letter-spacing: 0.2em; }
       .hero-divider { margin: 0 auto 2rem; }
-      .hero-title { margin-bottom: 0.5rem; }
 
-      /* About */
-      #about { grid-template-columns: 1fr; gap: 2.5rem; padding: 4rem 1.25rem; }
+      /* About — single column, full content visible */
+      #about {
+        grid-template-columns: 1fr;
+        gap: 2.5rem;
+        padding: 3.5rem 1.25rem;
+      }
+      /* Make sure Our Story text is visible */
+      #about .fade-in { opacity: 1 !important; transform: none !important; }
       .about-stats { gap: 1.2rem; }
 
-      /* Filters — scrollable row on very small screens */
+      /* Filters — horizontal scroll */
       .filters {
         flex-wrap: nowrap;
         overflow-x: auto;
         justify-content: flex-start;
-        padding: 0 1.25rem 0.5rem;
+        padding: 0.25rem 1.25rem 0.75rem;
         margin: 0 -1.25rem 2rem;
-        /* Hide scrollbar but keep functionality */
         scrollbar-width: none;
         -ms-overflow-style: none;
+        gap: 0.5rem;
       }
       .filters::-webkit-scrollbar { display: none; }
       .filter-btn { flex-shrink: 0; }
 
-      /* Product grid — 2 columns on mobile */
-      .products-grid { grid-template-columns: repeat(2, 1fr); gap: 1rem; }
+      /* Product grid — 2 columns */
+      .products-grid { grid-template-columns: repeat(2, 1fr); gap: 0.85rem; }
 
-      /* Product cards — always show the button on mobile */
-      .card-overlay { background: rgba(42,26,20,0.15); }
-      .card-overlay-btn { opacity: 1; transform: translateY(0); font-size: 0.55rem; padding: 0 0.5rem; }
-      .card-desc { display: none; } /* hide desc on mobile to save space */
+      /* Cards — show button always on mobile, show desc */
+      .card-overlay { background: rgba(42,26,20,0.12); }
+      .card-overlay-btn { opacity: 1; transform: translateY(0); font-size: 0.52rem; padding: 0 0.4rem; }
+      .card-desc { display: block; font-size: 0.7rem; }
 
-      /* Lightbox — stacked on mobile */
+      /* Lightbox — bottom sheet */
       #lightbox { padding: 0; align-items: flex-end; }
       .lightbox-inner {
         flex-direction: column;
-        max-height: 92vh;
-        max-width: 100%;
+        max-height: 92vh; max-width: 100%;
         border-radius: 16px 16px 0 0;
         overflow-y: auto;
         -webkit-overflow-scrolling: touch;
-        transform: translateY(30px);
+        transform: translateY(40px);
       }
       #lightbox.open .lightbox-inner { transform: translateY(0); }
-      .lightbox-img { width: 100%; height: 50vw; max-height: 240px; }
-      .lightbox-details { padding: 1.5rem 1.25rem 2rem; }
+      .lightbox-img { width: 100%; height: 48vw; max-height: 240px; }
+      .lightbox-details { padding: 1.4rem 1.25rem 2rem; }
       .lightbox-close { top: 0.6rem; right: 0.6rem; }
 
       /* Gallery */
       #gallery { grid-template-columns: repeat(2, 1fr); height: 200px; }
       #gallery .gallery-item:nth-child(n+3) { display: none; }
 
-      /* Testimonials */
-      .testimonials-grid { grid-template-columns: 1fr; gap: 1.5rem; }
+      /* Testimonials — single column, fully visible */
+      .testimonials-grid { grid-template-columns: 1fr; gap: 1.5rem; margin-top: 2rem; }
+      /* Make Love Notes visible */
+      #testimonials .fade-in { opacity: 1 !important; transform: none !important; }
 
       /* Footer */
       .footer-top { grid-template-columns: 1fr; gap: 2rem; }
-      .footer-bottom { flex-direction: column; align-items: flex-start; }
+      .footer-bottom { flex-direction: column; align-items: flex-start; gap: 0.75rem; }
     }
 
     /* ══════════════════════════════════════════════════════════
@@ -856,10 +876,22 @@ lb.addEventListener('click', function(e) { if (e.target === lb) closeLightbox();
 document.addEventListener('keydown', function(e) { if (e.key === 'Escape') closeLightbox(); });
 
 /* ── Fade-in observer ── */
+/* threshold:0 = fires the moment any pixel enters viewport */
 var fadeObserver = new IntersectionObserver(function(entries) {
-  entries.forEach(function(e) { if (e.isIntersecting) e.target.classList.add('visible'); });
-}, { threshold: 0.06 });
-document.querySelectorAll('.fade-in').forEach(function(el) { fadeObserver.observe(el); });
+  entries.forEach(function(e) {
+    if (e.isIntersecting) {
+      e.target.classList.add('visible');
+      fadeObserver.unobserve(e.target);
+    }
+  });
+}, { threshold: 0, rootMargin: '0px 0px -30px 0px' });
+
+function observeAllFadeIns() {
+  document.querySelectorAll('.fade-in:not(.visible)').forEach(function(el) {
+    fadeObserver.observe(el);
+  });
+}
+observeAllFadeIns();
 
 /* ── Navbar scroll ── */
 var navbar = document.getElementById('navbar');
@@ -940,6 +972,8 @@ document.querySelectorAll('.sidebar-link').forEach(function(a) {
     if (!snap.empty) {
       allProducts = snap.docs.map(function(d) { return Object.assign({ id: d.id }, d.data()); });
       renderProducts(activeFilter);
+      // Re-observe any newly rendered product cards
+      observeAllFadeIns();
     }
   } catch (err) {
     console.warn('[NOVIA] Firebase:', err.code || err.message);
