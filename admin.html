@@ -10,32 +10,22 @@
 
   <!--
   ═══════════════════════════════════════════════════════════
-  ADMIN PANEL SECURITY — HOW IT WORKS
+  IMAGE UPLOAD — HOW IT WORKS
   ═══════════════════════════════════════════════════════════
 
-  Authentication flow:
-    1. Admin enters email + password on login screen
-    2. Firebase Auth verifies the credentials
-    3. On success → admin screen is revealed
-    4. On logout → login screen reappears
-    5. onAuthStateChanged() re-checks on every page load
-       → page doesn't flash admin content before auth check
+  The image section has TWO tabs:
+    1. Upload from device  → file picker → uploads to Firebase Storage
+                             → stores the public download URL in Firestore
+    2. Paste URL           → Google Drive / Unsplash / any image URL
 
-  Firestore write protection:
-    - Firestore rules (firestore.rules) require request.auth != null
-    - Firebase SDK enforces this server-side — even if someone
-      bypasses the UI, they CANNOT write without a valid auth token
-    - The "Add Product" button is hidden until auth is confirmed
+  Firebase Storage rules required (storage.rules):
+    match /products/{file} {
+      allow read:  if true;
+      allow write: if request.auth != null;
+    }
 
-  SECURITY NOTE:
-    admin.html itself is a public file (Netlify serves everything).
-    The protection is in FIREBASE RULES — not the HTML.
-    An unauthenticated user who opens admin.html sees only the
-    login form and cannot save anything to Firestore.
-
-  TO CREATE YOUR ADMIN USER:
-    Firebase Console → Authentication → Users → Add user
-    Enter your email + a strong password (12+ chars recommended)
+  Make sure Firebase Storage is enabled in your project:
+    Firebase Console → Build → Storage → Get started
   ═══════════════════════════════════════════════════════════
   -->
 
@@ -59,8 +49,7 @@
     }
     body { background: var(--cream); color: var(--charcoal); font-family: var(--sans); font-weight: 300; min-height: 100vh; }
 
-    /* ── Auth guard: hide admin until Firebase confirms auth ── */
-    /* Both screens start hidden; JS reveals the right one */
+    /* Both screens hidden — JS reveals the right one after auth check */
     #login-screen { display: none; }
     #admin-screen { display: none; }
 
@@ -93,9 +82,7 @@
     }
     .form-input:focus, .form-select:focus, .form-textarea:focus { border-color: var(--rose); }
     .form-textarea { resize: vertical; min-height: 90px; }
-    .form-hint { font-size: 0.65rem; color: var(--warm-gray); margin-top: 0.35rem; line-height: 1.5; }
-
-    /* Field error state */
+    .form-hint { font-size: 0.65rem; color: var(--warm-gray); margin-top: 0.35rem; line-height: 1.6; }
     .form-input.invalid { border-color: var(--error); }
     .field-error { font-size: 0.65rem; color: var(--error); margin-top: 0.3rem; display: none; }
     .field-error.visible { display: block; }
@@ -108,6 +95,72 @@
     }
     .btn-submit:hover { opacity: 0.88; }
     .btn-submit:disabled { opacity: 0.45; cursor: not-allowed; }
+
+    /* ── Image Section — tabs ── */
+    .img-tabs {
+      display: flex;
+      border-bottom: 1px solid var(--blush);
+      margin-bottom: 1rem;
+    }
+    .img-tab {
+      font-size: 0.6rem; font-weight: 300; letter-spacing: 0.15em;
+      text-transform: uppercase; color: var(--warm-gray);
+      background: none; border: none; border-bottom: 2px solid transparent;
+      padding: 0.5rem 1rem 0.6rem; cursor: pointer;
+      margin-bottom: -1px;
+      transition: color 0.2s, border-color 0.2s;
+    }
+    .img-tab.active { color: var(--rose); border-bottom-color: var(--rose); }
+    .img-panel { display: none; }
+    .img-panel.active { display: block; }
+
+    /* ── Drop zone ── */
+    .drop-zone {
+      border: 1.5px dashed var(--blush);
+      padding: 2rem 1rem;
+      text-align: center;
+      cursor: pointer;
+      transition: border-color 0.2s, background 0.2s;
+      position: relative;
+    }
+    .drop-zone:hover, .drop-zone.drag-over {
+      border-color: var(--rose);
+      background: var(--rose-pale);
+    }
+    .drop-zone input[type="file"] {
+      position: absolute; inset: 0; opacity: 0;
+      cursor: pointer; width: 100%; height: 100%;
+    }
+    .drop-icon { font-size: 1.8rem; margin-bottom: 0.5rem; opacity: 0.35; }
+    .drop-label { font-size: 0.75rem; color: var(--warm-gray); line-height: 1.7; }
+    .drop-label strong { color: var(--rose); font-weight: 400; }
+
+    /* ── Upload progress bar ── */
+    .upload-progress { margin-top: 0.8rem; display: none; }
+    .upload-progress.visible { display: block; }
+    .progress-track {
+      width: 100%; height: 3px;
+      background: var(--blush); border-radius: 2px; overflow: hidden;
+    }
+    .progress-fill {
+      height: 100%; width: 0%;
+      background: linear-gradient(90deg, var(--champagne-deep), var(--rose));
+      border-radius: 2px;
+      transition: width 0.2s ease;
+    }
+    .progress-label {
+      font-size: 0.6rem; color: var(--warm-gray);
+      letter-spacing: 0.1em; margin-top: 0.4rem;
+      text-align: center;
+    }
+
+    /* ── Image preview (shared between tabs) ── */
+    .img-preview {
+      width: 100%; aspect-ratio: 4/3; object-fit: cover;
+      display: none; margin-top: 0.8rem;
+      border: 1px solid var(--blush);
+    }
+    .img-preview.visible { display: block; }
 
     /* ── Toast ── */
     #toast {
@@ -122,14 +175,12 @@
     #toast.error   { background: var(--error); }
 
     /* ── Admin Layout ── */
-    .admin-layout { display: grid; grid-template-columns: 380px 1fr; gap: 2rem; max-width: 1300px; margin: 2rem auto; padding: 0 2rem; }
+    #admin-screen { display: none; }
+    .admin-layout { display: grid; grid-template-columns: 400px 1fr; gap: 2rem; max-width: 1300px; margin: 2rem auto; padding: 0 2rem; }
     .admin-card { background: var(--ivory); padding: 2.5rem; height: fit-content; position: sticky; top: 2rem; }
     .admin-card-title { font-family: var(--serif); font-size: 1.6rem; font-weight: 300; color: var(--black); margin-bottom: 0.4rem; }
     .admin-card-sub { font-size: 0.6rem; letter-spacing: 0.2em; text-transform: uppercase; color: var(--rose); margin-bottom: 1.5rem; }
     .admin-divider { width: 40px; height: 1px; background: linear-gradient(to right, var(--champagne-deep), var(--rose)); margin-bottom: 2rem; }
-
-    /* Image preview */
-    .img-preview { width: 100%; aspect-ratio: 4/3; object-fit: cover; display: none; margin-top: 0.5rem; border: 1px solid var(--blush); }
 
     /* ── Product List ── */
     .product-list-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 1.5rem; }
@@ -148,12 +199,9 @@
     .list-empty p { font-family: var(--serif); font-size: 1.1rem; font-weight: 300; color: var(--warm-gray); }
     .list-error { background: #fdf0ee; border: 1px solid #e8a090; padding: 1.5rem; text-align: center; }
     .list-error p { font-size: 0.82rem; color: #a03020; line-height: 1.7; }
-
-    /* Skeleton */
     .row-skeleton { height: 100px; background: linear-gradient(90deg, var(--cream) 25%, var(--blush) 50%, var(--cream) 75%); background-size: 200% 100%; animation: shimmer 1.4s infinite; }
     @keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
 
-    /* Responsive */
     @media (max-width: 900px) { .admin-layout { grid-template-columns: 1fr; } .admin-card { position: static; } }
   </style>
 </head>
@@ -163,7 +211,6 @@
 
 <!-- ══════════════════════════════════
      LOGIN SCREEN
-     Shown to unauthenticated visitors
 ══════════════════════════════════ -->
 <div id="login-screen">
   <div class="login-card">
@@ -181,17 +228,13 @@
       <input class="form-input" type="password" id="login-password" placeholder="••••••••" autocomplete="current-password" />
       <p class="field-error" id="pass-error">Password is required.</p>
     </div>
-
-    <!-- Login error message (wrong credentials etc.) -->
     <p id="login-error" style="font-size:0.75rem;color:#c46a5a;margin-bottom:1rem;display:none;line-height:1.5;"></p>
-
     <button class="btn-submit" id="login-btn">Sign In</button>
   </div>
 </div>
 
 <!-- ══════════════════════════════════
      ADMIN SCREEN
-     Revealed only after auth confirms
 ══════════════════════════════════ -->
 <div id="admin-screen">
   <div class="admin-bar">
@@ -237,13 +280,47 @@
           <textarea class="form-textarea" id="p-desc" placeholder="A short elegant description…"></textarea>
         </div>
 
+        <!-- ── Image — two tabs: Upload or URL ── -->
         <div class="form-group">
-          <label class="form-label" for="p-image">Image URL</label>
-          <input class="form-input" type="url" id="p-image" placeholder="https://… or Google Drive share link" />
-          <p class="form-hint">
-            Paste any image URL or a Google Drive share link.<br>
-            Make sure Drive files are set to <strong>"Anyone with the link"</strong>.
-          </p>
+          <label class="form-label">Product Image</label>
+
+          <div class="img-tabs">
+            <button type="button" class="img-tab active" id="tab-upload" onclick="switchTab('upload')">
+              Upload from device
+            </button>
+            <button type="button" class="img-tab" id="tab-url" onclick="switchTab('url')">
+              Paste URL
+            </button>
+          </div>
+
+          <!-- Tab 1: Device upload -->
+          <div class="img-panel active" id="panel-upload">
+            <div class="drop-zone" id="drop-zone">
+              <input type="file" id="p-file" accept="image/*" />
+              <div class="drop-icon">📁</div>
+              <div class="drop-label">
+                <strong>Click to choose</strong> or drag & drop<br>
+                JPG, PNG, WEBP — max 5 MB
+              </div>
+            </div>
+            <!-- Upload progress -->
+            <div class="upload-progress" id="upload-progress">
+              <div class="progress-track">
+                <div class="progress-fill" id="progress-fill"></div>
+              </div>
+              <div class="progress-label" id="progress-label">Uploading…</div>
+            </div>
+          </div>
+
+          <!-- Tab 2: URL paste -->
+          <div class="img-panel" id="panel-url">
+            <input class="form-input" type="url" id="p-image" placeholder="https://… or Google Drive share link" />
+            <p class="form-hint">
+              For Google Drive: set file to "Anyone with the link → Viewer", then paste the share URL.
+            </p>
+          </div>
+
+          <!-- Shared preview — shown whichever tab is active -->
           <img id="img-preview" class="img-preview" alt="Image preview" />
         </div>
 
@@ -268,110 +345,222 @@
 </div>
 
 <!-- ════════════════════════════════════════════════════════════
-     FIREBASE — paste your config in firebaseConfig below
-     Same config as index.html
+     FIREBASE
+     ── Your real config is already pasted below ──
 ════════════════════════════════════════════════════════════ -->
 <script type="module">
-  /* ── Firebase imports ──────────────────────────────────────── */
-  import { initializeApp }  from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-  import {
-    getFirestore,
-    collection, getDocs, addDoc, deleteDoc, doc,
-    serverTimestamp, orderBy, query
-  } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-  import {
-    getAuth,
-    signInWithEmailAndPassword,
-    signOut,
-    onAuthStateChanged
-  } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+  import { initializeApp }       from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+  import { getFirestore, collection, getDocs, addDoc, deleteDoc, doc, serverTimestamp, orderBy, query }
+                                  from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+  import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged }
+                                  from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+  import { getStorage, ref, uploadBytesResumable, getDownloadURL, deleteObject }
+                                  from "https://www.gstatic.com/firebasejs/10.12.2/firebase-storage.js";
 
-  /* ══════════════════════════════════════════════════════════
-     🔧 PASTE YOUR FIREBASE CONFIG HERE (same as index.html)
-  ══════════════════════════════════════════════════════════ */
+  /* ── Firebase config ─────────────────────────────────────── */
+  const firebaseConfig = {
+    apiKey:            "AIzaSyCt7YDqTI9jxtO_ZSn-aVx9bgeYfxEQAzM",
+    authDomain:        "novia-a73a0.firebaseapp.com",
+    projectId:         "novia-a73a0",
+    storageBucket:     "novia-a73a0.firebasestorage.app",
+    messagingSenderId: "966486124513",
+    appId:             "1:966486124513:web:0da547b098bbe76b7094a0"
+  };
 
-const firebaseConfig = {
-  apiKey: "AIzaSyCt7YDqTI9jxtO_ZSn-aVx9bgeYfxEQAzM",
-  authDomain: "novia-a73a0.firebaseapp.com",
-  projectId: "novia-a73a0",
-  storageBucket: "novia-a73a0.firebasestorage.app",
-  messagingSenderId: "966486124513",
-  appId: "1:966486124513:web:0da547b098bbe76b7094a0",
-  measurementId: "G-9CQL917JR2"
-};
+  const app     = initializeApp(firebaseConfig);
+  const db      = getFirestore(app);
+  const auth    = getAuth(app);
+  const storage = getStorage(app);
 
-
-
-  /* ── Initialise Firebase ──────────────────────────────────── */
-  const app  = initializeApp(firebaseConfig);
-  const db   = getFirestore(app);
-  const auth = getAuth(app);
-
-  /* ── Category label map ───────────────────────────────────── */
   const CAT_LABEL = { bouquets:"Bouquets", gifts:"Gifts", accessories:"Accessories" };
 
-  /* ── Google Drive URL converter ───────────────────────────── */
+  /* ── Google Drive URL converter ──────────────────────────────
+     Converts share links to direct embeddable thumbnail URLs.
+     Uses thumbnail endpoint — more reliable than uc?export=view.
+  ──────────────────────────────────────────────────────────── */
   function driveUrl(url) {
     if (!url) return '';
     const m = url.match(/(?:\/d\/|id=)([a-zA-Z0-9_-]{25,})/);
-    return m ? `https://drive.google.com/uc?export=view&id=${m[1]}` : url;
+    return m ? `https://drive.google.com/thumbnail?id=${m[1]}&sz=w800` : url;
   }
 
-  /* ── Toast helper ─────────────────────────────────────────── */
+  /* ── Toast ───────────────────────────────────────────────── */
   function toast(msg, type = '') {
     const t = document.getElementById('toast');
-    t.textContent = msg;
-    t.className   = `show ${type}`;
+    t.textContent = msg; t.className = `show ${type}`;
     setTimeout(() => { t.className = ''; }, 3500);
   }
 
-  /* ── UI screen references ─────────────────────────────────── */
+  /* ── Image source tracking ───────────────────────────────────
+     activeImageUrl: the final URL to save in Firestore.
+     Set either by Storage upload or by URL tab input.
+  ──────────────────────────────────────────────────────────── */
+  let activeImageUrl = '';
+
+  const imgPreview     = document.getElementById('img-preview');
+  const progressWrap   = document.getElementById('upload-progress');
+  const progressFill   = document.getElementById('progress-fill');
+  const progressLabel  = document.getElementById('progress-label');
+
+  function showPreview(url) {
+    if (!url) { imgPreview.classList.remove('visible'); return; }
+    imgPreview.src = url;
+    imgPreview.classList.add('visible');
+    imgPreview.onerror = () => imgPreview.classList.remove('visible');
+  }
+
+  /* ── Tab switching ───────────────────────────────────────── */
+  window.switchTab = function(tab) {
+    document.getElementById('tab-upload').classList.toggle('active', tab === 'upload');
+    document.getElementById('tab-url').classList.toggle('active', tab === 'url');
+    document.getElementById('panel-upload').classList.toggle('active', tab === 'upload');
+    document.getElementById('panel-url').classList.toggle('active', tab === 'url');
+    // Clear the other tab's value when switching
+    if (tab === 'upload') document.getElementById('p-image').value = '';
+    else {
+      document.getElementById('p-file').value = '';
+      progressWrap.classList.remove('visible');
+    }
+    activeImageUrl = '';
+    showPreview('');
+  };
+
+  /* ════════════════════════════════════════════════════════════
+     DEVICE UPLOAD — Firebase Storage
+     ──────────────────────────────────────────────────────────
+     Flow:
+       1. User picks a file (file input or drag & drop)
+       2. File is validated (type + size)
+       3. Uploaded to Firebase Storage at products/{timestamp}_{filename}
+       4. Upload progress shown on the progress bar
+       5. On success → getDownloadURL() → stored as activeImageUrl
+       6. On form submit → activeImageUrl saved to Firestore
+  ════════════════════════════════════════════════════════════ */
+  const fileInput = document.getElementById('p-file');
+  const dropZone  = document.getElementById('drop-zone');
+
+  // Handle file selection (both click-to-browse and drop)
+  fileInput.addEventListener('change', () => {
+    if (fileInput.files[0]) handleFile(fileInput.files[0]);
+  });
+
+  // Drag & drop events
+  dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('drag-over'); });
+  dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
+  dropZone.addEventListener('drop', e => {
+    e.preventDefault();
+    dropZone.classList.remove('drag-over');
+    const file = e.dataTransfer.files[0];
+    if (file) handleFile(file);
+  });
+
+  function handleFile(file) {
+    /* Validate type */
+    if (!file.type.startsWith('image/')) {
+      toast('Please select an image file (JPG, PNG, WEBP…)', 'error');
+      return;
+    }
+    /* Validate size — 5 MB max */
+    if (file.size > 5 * 1024 * 1024) {
+      toast('Image is too large. Please use a file under 5 MB.', 'error');
+      return;
+    }
+
+    /* Show local preview instantly while upload runs */
+    const localUrl = URL.createObjectURL(file);
+    showPreview(localUrl);
+
+    /* Upload to Firebase Storage */
+    uploadToStorage(file);
+  }
+
+  function uploadToStorage(file) {
+    /* Unique filename: timestamp + sanitised original name */
+    const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+    const path     = `products/${Date.now()}_${safeName}`;
+    const storageRef = ref(storage, path);
+    const uploadTask = uploadBytesResumable(storageRef, file);
+
+    /* Show progress bar */
+    progressWrap.classList.add('visible');
+    progressFill.style.width = '0%';
+    progressLabel.textContent = 'Uploading…';
+
+    uploadTask.on(
+      'state_changed',
+
+      /* Progress snapshot */
+      snapshot => {
+        const pct = Math.round((snapshot.bytesTransferred / snapshot.totalBytes) * 100);
+        progressFill.style.width = pct + '%';
+        progressLabel.textContent = `Uploading… ${pct}%`;
+      },
+
+      /* Error */
+      err => {
+        progressWrap.classList.remove('visible');
+        activeImageUrl = '';
+        if (err.code === 'storage/unauthorized') {
+          toast('Upload failed: permission denied. Check Firebase Storage rules.', 'error');
+          console.error('[NOVIA] Storage rules blocked upload. Add storage.rules to Firebase.');
+        } else {
+          toast('Upload failed: ' + err.message, 'error');
+        }
+      },
+
+      /* Success */
+      async () => {
+        const downloadUrl = await getDownloadURL(uploadTask.snapshot.ref);
+        activeImageUrl = downloadUrl;
+        progressFill.style.width  = '100%';
+        progressLabel.textContent = 'Upload complete ✓';
+        /* Replace blob preview with the permanent Storage URL */
+        showPreview(downloadUrl);
+        setTimeout(() => progressWrap.classList.remove('visible'), 2000);
+      }
+    );
+  }
+
+  /* ── URL tab — live preview + driveUrl conversion ─────────── */
+  document.getElementById('p-image').addEventListener('input', function() {
+    const raw = this.value.trim();
+    const url = driveUrl(raw) || raw;
+    activeImageUrl = url;
+    showPreview(url);
+  });
+
+  /* ══════════════════════════════════════════════════════════
+     AUTH STATE
+  ══════════════════════════════════════════════════════════ */
   const loginScreen = document.getElementById('login-screen');
   const adminScreen = document.getElementById('admin-screen');
 
-  /* ════════════════════════════════════════════════════════════
-     AUTH STATE LISTENER
-     ──────────────────────────────────────────────────────────
-     onAuthStateChanged fires immediately on page load.
-     - If user is already signed in → show admin, load products
-     - If not signed in → show login form
-     This prevents the admin UI flashing before auth is checked.
-  ════════════════════════════════════════════════════════════ */
   onAuthStateChanged(auth, user => {
     if (user) {
-      /* Signed in — show admin panel */
       loginScreen.style.display = 'none';
       adminScreen.style.display = 'block';
       loadProducts();
     } else {
-      /* Not signed in — show login form */
       loginScreen.style.display = 'flex';
       adminScreen.style.display = 'none';
     }
   });
 
-  /* ════════════════════════════════════════════════════════════
-     LOGIN
-  ════════════════════════════════════════════════════════════ */
+  /* ── Login ───────────────────────────────────────────────── */
   document.getElementById('login-btn').addEventListener('click', async () => {
-    const emailEl = document.getElementById('login-email');
-    const passEl  = document.getElementById('login-password');
+    const emailEl  = document.getElementById('login-email');
+    const passEl   = document.getElementById('login-password');
     const loginErr = document.getElementById('login-error');
     const emailErr = document.getElementById('email-error');
     const passErr  = document.getElementById('pass-error');
 
-    /* Reset previous errors */
     [emailEl, passEl].forEach(el => el.classList.remove('invalid'));
     [emailErr, passErr].forEach(el => el.classList.remove('visible'));
     loginErr.style.display = 'none';
 
     let valid = true;
-    if (!emailEl.value.includes('@')) {
-      emailEl.classList.add('invalid'); emailErr.classList.add('visible'); valid = false;
-    }
-    if (!passEl.value) {
-      passEl.classList.add('invalid'); passErr.classList.add('visible'); valid = false;
-    }
+    if (!emailEl.value.includes('@')) { emailEl.classList.add('invalid'); emailErr.classList.add('visible'); valid = false; }
+    if (!passEl.value)                { passEl.classList.add('invalid');  passErr.classList.add('visible');  valid = false; }
     if (!valid) return;
 
     const btn = document.getElementById('login-btn');
@@ -379,73 +568,45 @@ const firebaseConfig = {
 
     try {
       await signInWithEmailAndPassword(auth, emailEl.value.trim(), passEl.value);
-      /* onAuthStateChanged above handles the rest */
     } catch (err) {
-      /*
-        Firebase auth error codes:
-          auth/user-not-found     → wrong email
-          auth/wrong-password     → wrong password
-          auth/invalid-credential → covers both in newer SDK
-          auth/too-many-requests  → brute force protection
-      */
-      const MESSAGES = {
-        'auth/invalid-credential': 'Incorrect email or password. Please try again.',
-        'auth/user-not-found':     'No account found with this email.',
-        'auth/wrong-password':     'Incorrect password. Please try again.',
-        'auth/too-many-requests':  'Too many failed attempts. Please wait a few minutes.',
-        'auth/network-request-failed': 'Network error. Check your connection.',
+      const MSGS = {
+        'auth/invalid-credential':      'Incorrect email or password.',
+        'auth/user-not-found':          'No account found with this email.',
+        'auth/wrong-password':          'Incorrect password.',
+        'auth/too-many-requests':       'Too many failed attempts. Please wait.',
+        'auth/network-request-failed':  'Network error. Check your connection.',
       };
-      loginErr.textContent = MESSAGES[err.code] || `Login failed: ${err.message}`;
+      loginErr.textContent = MSGS[err.code] || `Login failed: ${err.message}`;
       loginErr.style.display = 'block';
     } finally {
       btn.disabled = false; btn.textContent = 'Sign In';
     }
   });
 
-  /* Allow Enter key on password field */
   document.getElementById('login-password').addEventListener('keydown', e => {
     if (e.key === 'Enter') document.getElementById('login-btn').click();
   });
 
-  /* ── Logout ───────────────────────────────────────────────── */
+  /* ── Logout ──────────────────────────────────────────────── */
   document.getElementById('logout-btn').addEventListener('click', async () => {
     await signOut(auth);
-    toast('Signed out successfully.');
+    toast('Signed out.');
   });
 
-  /* ════════════════════════════════════════════════════════════
-     IMAGE PREVIEW
-     Live preview as the admin types or pastes an image URL
-  ════════════════════════════════════════════════════════════ */
-  const imgInput   = document.getElementById('p-image');
-  const imgPreview = document.getElementById('img-preview');
-
-  imgInput.addEventListener('input', () => {
-    const url = driveUrl(imgInput.value.trim());
-    if (url) {
-      imgPreview.src          = url;
-      imgPreview.style.display = 'block';
-      imgPreview.onerror      = () => { imgPreview.style.display = 'none'; };
-    } else {
-      imgPreview.style.display = 'none';
-    }
-  });
-
-  /* ════════════════════════════════════════════════════════════
+  /* ══════════════════════════════════════════════════════════
      ADD PRODUCT
      ──────────────────────────────────────────────────────────
-     Only authenticated admins can reach this code path —
-     Firestore rules enforce this server-side regardless.
-  ════════════════════════════════════════════════════════════ */
+     activeImageUrl is set either by the Storage upload callback
+     or by the URL tab's input handler — whichever tab is active.
+  ══════════════════════════════════════════════════════════ */
   document.getElementById('product-form').addEventListener('submit', async e => {
     e.preventDefault();
 
-    const nameEl = document.getElementById('p-name');
-    const catEl  = document.getElementById('p-category');
+    const nameEl  = document.getElementById('p-name');
+    const catEl   = document.getElementById('p-category');
     const nameErr = document.getElementById('name-error');
     const catErr  = document.getElementById('cat-error');
 
-    /* Reset validation */
     [nameEl, catEl].forEach(el => el.classList.remove('invalid'));
     [nameErr, catErr].forEach(el => el.classList.remove('visible'));
 
@@ -453,85 +614,76 @@ const firebaseConfig = {
     const price    = document.getElementById('p-price').value.trim();
     const category = catEl.value;
     const desc     = document.getElementById('p-desc').value.trim();
-    const imageRaw = imgInput.value.trim();
-    const image    = driveUrl(imageRaw) || imageRaw;
+    const image    = activeImageUrl;
 
-    /* Client-side validation */
     let valid = true;
     if (!name)     { nameEl.classList.add('invalid'); nameErr.classList.add('visible'); valid = false; }
     if (!category) { catEl.classList.add('invalid');  catErr.classList.add('visible');  valid = false; }
     if (!valid) return;
 
+    /* Warn if upload is still in progress */
+    const uploadActive = progressWrap.classList.contains('visible') && progressFill.style.width !== '100%';
+    if (uploadActive) {
+      toast('Please wait — image is still uploading…', 'error');
+      return;
+    }
+
     const btn = document.getElementById('submit-btn');
-    btn.disabled    = true;
-    btn.textContent = 'Adding…';
+    btn.disabled = true; btn.textContent = 'Adding…';
 
     try {
-      /*
-        addDoc() will FAIL with permission-denied if:
-          - The user is not authenticated
-          - The Firestore rules don't allow writes
-        This is the server-side security layer.
-      */
       await addDoc(collection(db, 'products'), {
-        name,
-        price,
-        category,
-        desc,
-        image,
+        name, price, category, desc, image,
         createdAt: serverTimestamp()
       });
 
       toast('Product added successfully!', 'success');
 
-      /* Reset form */
+      /* Reset everything */
       document.getElementById('product-form').reset();
-      imgPreview.style.display = 'none';
+      activeImageUrl = '';
+      showPreview('');
+      progressWrap.classList.remove('visible');
+      switchTab('upload'); // return to upload tab
 
-      /* Reload list */
       loadProducts();
 
     } catch (err) {
-      if (err.code === 'permission-denied') {
-        toast('Permission denied. Check your Firestore rules.', 'error');
-        console.error('[NOVIA Admin] Firestore rules blocked the write. Deploy firestore.rules.');
-      } else {
-        toast('Error: ' + err.message, 'error');
-      }
+      toast(
+        err.code === 'permission-denied'
+          ? 'Permission denied — check your Firestore rules.'
+          : 'Error: ' + err.message,
+        'error'
+      );
     } finally {
-      btn.disabled    = false;
-      btn.textContent = 'Add Product';
+      btn.disabled = false; btn.textContent = 'Add Product';
     }
   });
 
-  /* ════════════════════════════════════════════════════════════
+  /* ══════════════════════════════════════════════════════════
      LOAD PRODUCTS LIST
-  ════════════════════════════════════════════════════════════ */
-  const listEl   = document.getElementById('product-list');
-  const countEl  = document.getElementById('product-count');
+  ══════════════════════════════════════════════════════════ */
+  const listEl  = document.getElementById('product-list');
+  const countEl = document.getElementById('product-count');
 
   async function loadProducts() {
     listEl.innerHTML = '<div class="row-skeleton"></div><div class="row-skeleton"></div><div class="row-skeleton"></div>';
-
     try {
-      const q    = query(collection(db, 'products'), orderBy('createdAt', 'desc'));
-      const snap = await getDocs(q);
-
+      const snap = await getDocs(query(collection(db, 'products'), orderBy('createdAt', 'desc')));
       countEl.textContent = `${snap.size} product${snap.size !== 1 ? 's' : ''}`;
 
       if (snap.empty) {
-        listEl.innerHTML = `<div class="list-empty"><p>No products yet. Add your first item.</p></div>`;
+        listEl.innerHTML = '<div class="list-empty"><p>No products yet. Add your first item.</p></div>';
         return;
       }
 
       listEl.innerHTML = '';
       snap.docs.forEach(docSnap => {
-        const p      = { id: docSnap.id, ...docSnap.data() };
-        const imgSrc = p.image || '';
-        const row    = document.createElement('div');
+        const p   = { id: docSnap.id, ...docSnap.data() };
+        const row = document.createElement('div');
         row.className = 'product-row';
         row.innerHTML = `
-          <img class="product-row-img" src="${imgSrc}" alt="${p.name}"
+          <img class="product-row-img" src="${p.image || ''}" alt="${p.name}"
                onerror="this.src='https://images.unsplash.com/photo-1465495976277-4387d4b0b4c6?w=200&q=60';this.onerror=null" />
           <div>
             <p class="product-row-name">${p.name}</p>
@@ -540,38 +692,52 @@ const firebaseConfig = {
           </div>
           <button class="btn-delete" aria-label="Delete ${p.name}">Delete</button>`;
 
-        row.querySelector('.btn-delete').addEventListener('click', () => deleteProduct(p.id, p.name));
+        row.querySelector('.btn-delete').addEventListener('click', () => deleteProduct(p.id, p.name, p.image));
         listEl.appendChild(row);
       });
 
     } catch (err) {
       countEl.textContent = 'Error';
-      listEl.innerHTML = `
-        <div class="list-error">
-          <p>Could not load products.<br>
-          ${err.code === 'permission-denied'
-            ? 'Firestore rules are blocking reads. Deploy firestore.rules first.'
-            : err.message}</p>
-        </div>`;
-      console.error('[NOVIA Admin] loadProducts error:', err);
+      listEl.innerHTML = `<div class="list-error"><p>${
+        err.code === 'permission-denied'
+          ? 'Permission denied — deploy firestore.rules first.'
+          : 'Could not load products: ' + err.message
+      }</p></div>`;
     }
   }
 
-  /* ════════════════════════════════════════════════════════════
+  /* ══════════════════════════════════════════════════════════
      DELETE PRODUCT
-  ════════════════════════════════════════════════════════════ */
-  async function deleteProduct(id, name) {
+     Also removes the image from Firebase Storage if it was
+     uploaded there (identified by firebasestorage.googleapis.com)
+  ══════════════════════════════════════════════════════════ */
+  async function deleteProduct(id, name, imageUrl) {
     if (!confirm(`Delete "${name}"?\nThis cannot be undone.`)) return;
     try {
+      /* Delete Firestore document */
       await deleteDoc(doc(db, 'products', id));
+
+      /* If image is in Firebase Storage, delete it too (clean up) */
+      if (imageUrl && imageUrl.includes('firebasestorage.googleapis.com')) {
+        try {
+          const imgRef = ref(storage, imageUrl);
+          await deleteObject(imgRef);
+        } catch (storageErr) {
+          /* Storage delete failure is non-fatal — Firestore doc is already gone */
+          console.warn('[NOVIA] Could not delete storage image:', storageErr.message);
+        }
+      }
+
       toast(`"${name}" deleted.`);
       loadProducts();
+
     } catch (err) {
-      if (err.code === 'permission-denied') {
-        toast('Permission denied — check Firestore rules.', 'error');
-      } else {
-        toast('Delete failed: ' + err.message, 'error');
-      }
+      toast(
+        err.code === 'permission-denied'
+          ? 'Permission denied — check Firestore rules.'
+          : 'Delete failed: ' + err.message,
+        'error'
+      );
     }
   }
 </script>
