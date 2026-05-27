@@ -212,9 +212,11 @@
           <label class="form-label" for="p-category">Category *</label>
           <select class="form-select" id="p-category" required>
             <option value="" disabled selected>Select category…</option>
-            <option value="bouquets">Bouquets</option>
-            <option value="gifts">Gifts</option>
             <option value="accessories">Accessories</option>
+            <option value="pearl-cup">Pearl Cup</option>
+            <option value="hand-mirror">Hand Mirror</option>
+            <option value="bridal-bouquet">Bridal Bouquet</option>
+            <option value="bridal-hand-fan">Bridal Hand Fan</option>
           </select>
           <p class="field-error" id="cat-error">Please select a category.</p>
         </div>
@@ -303,8 +305,8 @@
         Set Signing mode to "Unsigned" → Save → copy preset name
      4. Paste both values below
   ════════════════════════════════════════════════════════════ */
-  const CLOUDINARY_CLOUD_NAME   = 'dzgqrtukw';   // e.g. 'my-novia-shop'
-  const CLOUDINARY_UPLOAD_PRESET = 'noviaaa'; // e.g. 'novia_products'
+  const CLOUDINARY_CLOUD_NAME   = 'YOUR_CLOUD_NAME';   // e.g. 'my-novia-shop'
+  const CLOUDINARY_UPLOAD_PRESET = 'YOUR_UPLOAD_PRESET'; // e.g. 'novia_products'
 
   /* ════════════════════════════════════════════════════════════
      FIREBASE CONFIG
@@ -328,7 +330,13 @@
   const db   = getFirestore(app);
   const auth = getAuth(app);
 
-  const CAT_LABEL = { bouquets:"Bouquets", gifts:"Gifts", accessories:"Accessories" };
+  const CAT_LABEL = {
+    'accessories':     'Accessories',
+    'pearl-cup':       'Pearl Cup',
+    'hand-mirror':     'Hand Mirror',
+    'bridal-bouquet':  'Bridal Bouquet',
+    'bridal-hand-fan': 'Bridal Hand Fan'
+  };
 
   /* ── Helpers ─────────────────────────────────────────────── */
   function toast(msg, type = '') {
