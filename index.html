@@ -1,0 +1,888 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>NOVIA — Luxury Handmade Bridal</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;0,600;1,300;1,400&family=Jost:wght@200;300;400&display=swap" rel="stylesheet" />
+
+  <!--
+  ═══════════════════════════════════════════════════════════
+  NOVIA — Firebase Setup Checklist
+  ═══════════════════════════════════════════════════════════
+
+  STEP 1 — Create Firebase project
+    https://console.firebase.google.com → Add project → "novia-bridal"
+
+  STEP 2 — Enable Firestore (PRODUCTION mode, not test mode)
+    Build → Firestore Database → Create database
+    ✅ Choose "Start in PRODUCTION mode"
+    Then immediately go to the Rules tab and paste firestore.rules
+
+  STEP 3 — Enable Authentication
+    Build → Authentication → Get Started → Email/Password → Enable
+
+  STEP 4 — Create admin user
+    Authentication → Users → Add user
+    Use your admin email + a strong password
+
+  STEP 5 — Register your web app & get config
+    Project Settings → General → Your apps → Add app (</>) → Web
+    Copy the firebaseConfig object → paste below replacing placeholders
+
+  STEP 6 — Deploy Firestore rules (prevent test-mode expiry)
+    Firestore → Rules tab → paste contents of firestore.rules → Publish
+
+  STEP 7 — (Optional) Deploy Storage rules if using image uploads
+    Storage → Rules tab → paste contents of storage.rules → Publish
+
+  ═══════════════════════════════════════════════════════════
+  WHY PRODUCTION MODE?
+    Test mode auto-expires after 30 days → site breaks.
+    Production mode + the rules file = secure forever.
+  ═══════════════════════════════════════════════════════════
+
+  Firestore products collection fields:
+    name       : string   — "White Rose Bouquet"
+    price      : string   — "850 EGP"
+    category   : string   — "bouquets" | "gifts" | "accessories"
+    desc       : string   — short description
+    image      : string   — Unsplash or Google Drive URL
+    createdAt  : timestamp — set automatically via serverTimestamp()
+  -->
+
+  <style>
+    /* ─── CSS Variables — Champagne & Rose Gold ─── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --ivory:          #fdf6f0;
+      --cream:          #f7ede4;
+      --blush:          #eecfc0;
+      --warm-gray:      #b89a8e;
+      --charcoal:       #3a2a25;
+      --black:          #2a1a14;
+      --rose:           #d4896e;
+      --rose-pale:      #f2ddd5;
+      --champagne:      #e8c9a0;
+      --champagne-deep: #c9a06a;
+      --error-bg:       #fdf0ee;
+      --error-border:   #e8a090;
+      --error-text:     #a03020;
+      --serif: 'Cormorant Garamond', Georgia, serif;
+      --sans:  'Jost', sans-serif;
+    }
+    html { scroll-behavior: smooth; }
+    body {
+      background: var(--ivory);
+      color: var(--charcoal);
+      font-family: var(--sans);
+      font-weight: 300;
+      overflow-x: hidden;
+    }
+
+    /* ─── Loading Screen ─── */
+    #loader {
+      position: fixed; inset: 0;
+      background: linear-gradient(135deg, #2a1a14 0%, #4a2a1e 100%);
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center; gap: 1.5rem;
+      z-index: 9999;
+      transition: opacity 0.8s ease, visibility 0.8s ease;
+    }
+    #loader.hidden { opacity: 0; visibility: hidden; pointer-events: none; }
+    .loader-text {
+      font-family: var(--serif); font-size: clamp(2rem, 6vw, 4rem);
+      font-weight: 300; color: #fff; letter-spacing: 0.3em;
+      opacity: 0; animation: loaderFade 1.6s ease forwards 0.2s;
+    }
+    .loader-bar {
+      width: 80px; height: 1px; background: rgba(255,255,255,0.2);
+      position: relative; overflow: hidden;
+      opacity: 0; animation: loaderFade 0.4s ease forwards 0.8s;
+    }
+    .loader-bar::after {
+      content: ''; position: absolute; top: 0; left: -100%;
+      width: 100%; height: 100%;
+      background: linear-gradient(90deg, var(--champagne), var(--rose));
+      animation: loaderSlide 1.2s ease forwards 1s;
+    }
+    @keyframes loaderFade { to { opacity: 1; } }
+    @keyframes loaderSlide { to { left: 0; } }
+
+    /* ─── Error Banner ─── */
+    #error-banner {
+      display: none;
+      background: var(--error-bg);
+      border: 1px solid var(--error-border);
+      border-radius: 4px;
+      padding: 1rem 1.5rem;
+      margin: 1rem 4rem;
+      font-size: 0.82rem;
+      color: var(--error-text);
+      text-align: center;
+      line-height: 1.6;
+    }
+    #error-banner.visible { display: block; }
+    #error-banner strong { font-weight: 400; }
+
+    /* ─── Navbar ─── */
+    nav {
+      position: fixed; top: 0; left: 0; right: 0; z-index: 200;
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 1.4rem 4rem;
+      transition: background 0.4s ease, padding 0.4s ease, box-shadow 0.4s ease;
+    }
+    nav.scrolled {
+      background: rgba(253,246,240,0.97);
+      backdrop-filter: blur(8px);
+      padding: 1rem 4rem;
+      box-shadow: 0 1px 0 rgba(196,132,106,0.15);
+    }
+    .nav-logo {
+      font-family: var(--serif); font-size: 1.4rem; font-weight: 400;
+      letter-spacing: 0.25em; color: var(--black); text-decoration: none;
+    }
+    nav.hero-nav .nav-logo { color: #fff; }
+    .nav-links { display: flex; gap: 2.5rem; list-style: none; }
+    .nav-links a {
+      font-size: 0.7rem; font-weight: 300; letter-spacing: 0.2em;
+      text-transform: uppercase; color: var(--charcoal);
+      text-decoration: none; opacity: 0.7; transition: opacity 0.25s;
+    }
+    .nav-links a:hover { opacity: 1; }
+    nav.hero-nav .nav-links a { color: #fff; }
+    .nav-whatsapp {
+      font-size: 0.65rem; letter-spacing: 0.15em; text-transform: uppercase;
+      color: var(--charcoal); text-decoration: none;
+      border-bottom: 1px solid currentColor; padding-bottom: 1px;
+      opacity: 0.7; transition: opacity 0.25s;
+    }
+    nav.hero-nav .nav-whatsapp { color: #fff; }
+    .nav-whatsapp:hover { opacity: 1; }
+    .nav-hamburger {
+      display: none; flex-direction: column; gap: 5px; cursor: pointer;
+      background: none; border: none; padding: 4px; z-index: 201;
+    }
+    .nav-hamburger span {
+      display: block; width: 24px; height: 1px;
+      background: var(--charcoal); transition: transform 0.35s ease, opacity 0.35s ease;
+    }
+    nav.hero-nav .nav-hamburger span { background: #fff; }
+    nav.scrolled .nav-hamburger span { background: var(--charcoal); }
+    .nav-hamburger.open span:nth-child(1) { transform: translateY(6px) rotate(45deg); }
+    .nav-hamburger.open span:nth-child(2) { opacity: 0; }
+    .nav-hamburger.open span:nth-child(3) { transform: translateY(-6px) rotate(-45deg); }
+
+    /* ─── Mobile Sidebar ─── */
+    .sidebar-overlay {
+      display: none; position: fixed; inset: 0;
+      background: rgba(42,26,20,0.5); backdrop-filter: blur(2px);
+      z-index: 300; opacity: 0; transition: opacity 0.35s ease;
+    }
+    .sidebar-overlay.open { opacity: 1; }
+    .sidebar {
+      position: fixed; top: 0; right: 0;
+      width: min(320px, 85vw); height: 100dvh;
+      background: var(--ivory); z-index: 400;
+      display: flex; flex-direction: column;
+      padding: 5rem 2.5rem 3rem;
+      transform: translateX(100%);
+      transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+      overflow-y: auto;
+    }
+    .sidebar.open { transform: translateX(0); }
+    .sidebar-logo { font-family: var(--serif); font-size: 1.6rem; font-weight: 300; letter-spacing: 0.2em; color: var(--black); margin-bottom: 0.4rem; }
+    .sidebar-tagline { font-size: 0.55rem; letter-spacing: 0.25em; text-transform: uppercase; color: var(--rose); margin-bottom: 2.5rem; }
+    .sidebar-divider { width: 40px; height: 1px; background: linear-gradient(to right, var(--champagne-deep), var(--rose)); margin-bottom: 2.5rem; }
+    .sidebar-nav { list-style: none; margin-bottom: 3rem; }
+    .sidebar-nav li { border-bottom: 1px solid var(--blush); }
+    .sidebar-nav a {
+      display: block; font-family: var(--serif); font-size: 1.3rem; font-weight: 300;
+      color: var(--black); text-decoration: none; padding: 0.9rem 0;
+      transition: color 0.2s, padding-left 0.2s;
+    }
+    .sidebar-nav a:hover { color: var(--rose); padding-left: 0.4rem; }
+    .sidebar-whatsapp {
+      display: inline-flex; align-items: center; gap: 0.6rem;
+      font-size: 0.65rem; letter-spacing: 0.2em; text-transform: uppercase;
+      color: #fff; background: linear-gradient(135deg, var(--champagne-deep), var(--rose));
+      padding: 0.9rem 1.6rem; text-decoration: none; margin-bottom: auto;
+    }
+    .sidebar-whatsapp svg { width: 14px; height: 14px; fill: currentColor; }
+
+    /* ─── Hero ─── */
+    #hero {
+      position: relative; height: 100svh; min-height: 600px;
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center; overflow: hidden;
+    }
+    .hero-bg {
+      position: absolute; inset: 0;
+      background: linear-gradient(160deg, #2a1a14 0%, #4a2a1e 35%, #3a2018 65%, #5a2e20 100%);
+    }
+    .hero-bg::after {
+      content: ''; position: absolute; inset: 0;
+      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.04'/%3E%3C/svg%3E");
+      opacity: 0.4;
+    }
+    .hero-ornament {
+      position: absolute; width: 1px; height: 80px;
+      background: linear-gradient(to bottom, transparent, var(--champagne), transparent);
+      top: 0; left: 50%; transform: translateX(-50%);
+      animation: ornamentDrop 1.2s ease forwards 1.8s; opacity: 0;
+    }
+    @keyframes ornamentDrop {
+      from { opacity: 0; transform: translateX(-50%) scaleY(0); transform-origin: top; }
+      to   { opacity: 1; transform: translateX(-50%) scaleY(1); }
+    }
+    .hero-content {
+      position: relative; z-index: 2; text-align: center;
+      opacity: 0; animation: heroReveal 1.2s ease forwards 1.4s;
+    }
+    @keyframes heroReveal {
+      from { opacity: 0; transform: translateY(20px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    .hero-title {
+      font-family: var(--serif); font-size: clamp(5rem, 14vw, 11rem);
+      font-weight: 300; letter-spacing: 0.15em; color: #fff; line-height: 1; margin-bottom: 0.3rem;
+    }
+    .hero-subtitle {
+      font-size: clamp(0.6rem, 1.5vw, 0.75rem); font-weight: 200;
+      letter-spacing: 0.45em; text-transform: uppercase;
+      color: var(--champagne); margin-bottom: 3rem;
+    }
+    .hero-divider {
+      width: 60px; height: 1px;
+      background: linear-gradient(to right, var(--champagne), var(--rose), var(--champagne));
+      margin: 0 auto 3rem; opacity: 0.8;
+    }
+    .btn-primary {
+      display: inline-block; font-size: 0.65rem; font-weight: 300;
+      letter-spacing: 0.3em; text-transform: uppercase; color: #fff;
+      border: 1px solid rgba(255,255,255,0.4); padding: 1rem 2.5rem;
+      text-decoration: none; position: relative; overflow: hidden;
+      transition: border-color 0.3s ease;
+    }
+    .btn-primary::before {
+      content: ''; position: absolute; inset: 0;
+      background: linear-gradient(135deg, var(--champagne-deep), var(--rose));
+      transform: scaleX(0); transform-origin: left; transition: transform 0.4s ease; z-index: -1;
+    }
+    .btn-primary:hover { border-color: var(--rose); }
+    .btn-primary:hover::before { transform: scaleX(1); }
+    .hero-scroll {
+      position: absolute; bottom: 2.5rem; left: 50%; transform: translateX(-50%);
+      display: flex; flex-direction: column; align-items: center; gap: 0.5rem;
+      opacity: 0; animation: heroReveal 1s ease forwards 2.2s;
+    }
+    .hero-scroll span { font-size: 0.55rem; letter-spacing: 0.25em; text-transform: uppercase; color: rgba(255,255,255,0.4); }
+    .scroll-line { width: 1px; height: 40px; background: linear-gradient(to bottom, rgba(255,255,255,0.3), transparent); animation: scrollPulse 2s ease infinite 2.5s; }
+    @keyframes scrollPulse { 0%, 100% { opacity: 0.4; } 50% { opacity: 1; } }
+
+    /* ─── Shared Section Styles ─── */
+    section { padding: 7rem 4rem; }
+    .section-eyebrow { font-size: 0.6rem; font-weight: 300; letter-spacing: 0.4em; text-transform: uppercase; color: var(--rose); margin-bottom: 1rem; }
+    .section-title { font-family: var(--serif); font-size: clamp(2.2rem, 4vw, 3.2rem); font-weight: 300; color: var(--black); line-height: 1.15; margin-bottom: 1.5rem; }
+    .section-line { width: 50px; height: 1px; background: linear-gradient(to right, var(--champagne-deep), var(--rose)); margin-bottom: 1.5rem; }
+    .section-desc { font-size: 0.85rem; line-height: 1.9; color: var(--warm-gray); max-width: 480px; }
+
+    /* ─── About ─── */
+    #about { background: linear-gradient(135deg, var(--cream) 0%, var(--rose-pale) 100%); display: grid; grid-template-columns: 1fr 1fr; gap: 6rem; align-items: center; }
+    .about-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; }
+    .stat-card { border-top: 1px solid var(--champagne); padding-top: 1.5rem; }
+    .stat-number { font-family: var(--serif); font-size: 2.8rem; font-weight: 300; color: var(--black); letter-spacing: -0.02em; }
+    .stat-label { font-size: 0.65rem; letter-spacing: 0.2em; text-transform: uppercase; color: var(--warm-gray); margin-top: 0.3rem; }
+
+    /* ─── Collection ─── */
+    #collection { background: var(--ivory); }
+    .collection-header { text-align: center; margin-bottom: 4rem; }
+    .collection-header .section-line { margin: 0 auto 1.5rem; }
+    .collection-header .section-desc { margin: 0 auto; text-align: center; }
+    .filters { display: flex; justify-content: center; gap: 0.5rem; margin-bottom: 3.5rem; flex-wrap: wrap; }
+    .filter-btn {
+      font-size: 0.6rem; font-weight: 300; letter-spacing: 0.2em; text-transform: uppercase;
+      color: var(--warm-gray); background: none; border: 1px solid var(--blush);
+      padding: 0.6rem 1.5rem; cursor: pointer; transition: all 0.25s ease;
+    }
+    .filter-btn:hover, .filter-btn.active {
+      background: linear-gradient(135deg, var(--champagne-deep), var(--rose));
+      border-color: var(--rose); color: #fff;
+    }
+    .products-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 2rem; }
+
+    /* ─── Skeleton Loaders ─── */
+    .skeleton-card { cursor: default; }
+    .skeleton-img { aspect-ratio: 3/4; background: linear-gradient(90deg, var(--cream) 25%, var(--blush) 50%, var(--cream) 75%); background-size: 200% 100%; animation: shimmer 1.4s infinite; margin-bottom: 1.2rem; }
+    .skeleton-line { height: 0.75rem; border-radius: 2px; margin-bottom: 0.6rem; background: linear-gradient(90deg, var(--cream) 25%, var(--blush) 50%, var(--cream) 75%); background-size: 200% 100%; animation: shimmer 1.4s infinite; }
+    .skeleton-line.short { width: 60%; }
+    .skeleton-line.med   { width: 80%; }
+    @keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+
+    /* ─── Product Cards ─── */
+    .product-card { cursor: pointer; transition: transform 0.4s ease; }
+    .product-card:hover { transform: translateY(-6px); }
+    .card-image { position: relative; aspect-ratio: 3/4; overflow: hidden; margin-bottom: 1.2rem; background: var(--cream); }
+    .card-image img { width: 100%; height: 100%; object-fit: cover; transition: transform 0.7s ease; }
+    .product-card:hover .card-image img { transform: scale(1.06); }
+    .card-overlay { position: absolute; inset: 0; background: rgba(42,26,20,0); display: flex; align-items: flex-end; justify-content: center; padding: 1.5rem; transition: background 0.4s ease; }
+    .product-card:hover .card-overlay { background: rgba(42,26,20,0.3); }
+    .card-overlay-btn {
+      font-size: 0.6rem; font-weight: 300; letter-spacing: 0.2em; text-transform: uppercase; color: #fff;
+      background: linear-gradient(135deg, var(--champagne-deep), var(--rose));
+      border: none; padding: 0.75rem 1.5rem; cursor: pointer; width: 100%;
+      opacity: 0; transform: translateY(8px); transition: opacity 0.3s ease, transform 0.3s ease;
+    }
+    .product-card:hover .card-overlay-btn { opacity: 1; transform: translateY(0); }
+    .card-category { font-size: 0.55rem; letter-spacing: 0.25em; text-transform: uppercase; color: var(--rose); margin-bottom: 0.4rem; }
+    .card-name { font-family: var(--serif); font-size: 1.1rem; font-weight: 400; color: var(--black); margin-bottom: 0.4rem; }
+    .card-price { font-size: 0.8rem; color: var(--champagne-deep); font-weight: 400; margin-bottom: 0.3rem; }
+    .card-desc { font-size: 0.75rem; line-height: 1.7; color: var(--warm-gray); }
+    .card-tag { display: inline-block; font-size: 0.5rem; letter-spacing: 0.15em; text-transform: uppercase; color: var(--rose); border: 1px solid var(--champagne); padding: 0.25rem 0.6rem; margin-top: 0.8rem; }
+    .no-products { grid-column: 1/-1; text-align: center; padding: 4rem 2rem; }
+    .no-products p { font-family: var(--serif); font-size: 1.4rem; font-weight: 300; color: var(--warm-gray); }
+
+    /* ─── Firebase Error Card (shown inside grid when fetch fails) ─── */
+    .firebase-error {
+      grid-column: 1/-1;
+      background: var(--error-bg);
+      border: 1px solid var(--error-border);
+      border-radius: 4px;
+      padding: 2.5rem;
+      text-align: center;
+    }
+    .firebase-error h3 { font-family: var(--serif); font-size: 1.4rem; font-weight: 300; color: var(--error-text); margin-bottom: 0.5rem; }
+    .firebase-error p  { font-size: 0.8rem; color: var(--warm-gray); line-height: 1.7; margin-bottom: 1rem; }
+    .firebase-error .retry-btn {
+      font-size: 0.65rem; letter-spacing: 0.2em; text-transform: uppercase; color: var(--rose);
+      background: none; border: 1px solid var(--rose); padding: 0.6rem 1.5rem; cursor: pointer; transition: all 0.25s;
+    }
+    .firebase-error .retry-btn:hover { background: var(--rose); color: #fff; }
+
+    /* ─── Lightbox ─── */
+    #lightbox { position: fixed; inset: 0; background: rgba(42,26,20,0.9); z-index: 1000; display: flex; align-items: center; justify-content: center; opacity: 0; visibility: hidden; transition: opacity 0.35s ease, visibility 0.35s ease; }
+    #lightbox.open { opacity: 1; visibility: visible; }
+    .lightbox-inner { display: flex; max-width: 900px; width: 90%; background: var(--ivory); position: relative; transform: scale(0.94); transition: transform 0.35s ease; max-height: 90vh; overflow: hidden; }
+    #lightbox.open .lightbox-inner { transform: scale(1); }
+    .lightbox-img { width: 45%; object-fit: cover; display: block; }
+    .lightbox-details { flex: 1; padding: 3rem; display: flex; flex-direction: column; justify-content: center; overflow-y: auto; }
+    .lightbox-close { position: absolute; top: 1rem; right: 1rem; background: none; border: none; font-size: 1.5rem; cursor: pointer; color: var(--warm-gray); line-height: 1; transition: color 0.2s; }
+    .lightbox-close:hover { color: var(--black); }
+    .lightbox-category { font-size: 0.6rem; letter-spacing: 0.3em; text-transform: uppercase; color: var(--rose); margin-bottom: 0.8rem; }
+    .lightbox-name { font-family: var(--serif); font-size: 2rem; font-weight: 400; color: var(--black); margin-bottom: 0.4rem; }
+    .lightbox-price { font-size: 1rem; color: var(--champagne-deep); font-weight: 300; margin-bottom: 1rem; }
+    .lightbox-desc { font-size: 0.82rem; line-height: 1.85; color: var(--warm-gray); margin-bottom: 2rem; }
+    .btn-whatsapp {
+      display: inline-flex; align-items: center; gap: 0.6rem;
+      font-size: 0.65rem; font-weight: 300; letter-spacing: 0.25em; text-transform: uppercase; color: #fff;
+      background: linear-gradient(135deg, var(--champagne-deep), var(--rose));
+      border: none; padding: 1rem 2rem; text-decoration: none; cursor: pointer; transition: opacity 0.3s ease;
+    }
+    .btn-whatsapp:hover { opacity: 0.85; }
+    .btn-whatsapp svg { width: 16px; height: 16px; fill: currentColor; }
+
+    /* ─── Gallery ─── */
+    #gallery { padding: 0; display: grid; grid-template-columns: repeat(5, 1fr); height: 340px; overflow: hidden; }
+    .gallery-item { overflow: hidden; position: relative; }
+    .gallery-item img { width: 100%; height: 100%; object-fit: cover; filter: brightness(0.88); transition: transform 0.6s ease, filter 0.4s ease; }
+    .gallery-item:hover img { transform: scale(1.08); filter: brightness(1); }
+
+    /* ─── Testimonials ─── */
+    #testimonials { background: linear-gradient(160deg, #2a1a14 0%, #4a2a1e 50%, #3a1e18 100%); text-align: center; padding: 7rem 4rem; }
+    .testimonials-eyebrow { color: var(--champagne); }
+    .testimonials-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 3rem; margin-top: 4rem; }
+    .testimonial-card { text-align: left; border-top: 1px solid rgba(232,201,160,0.25); padding-top: 2rem; }
+    .testimonial-quote { font-family: var(--serif); font-size: 1.05rem; font-weight: 300; font-style: italic; color: rgba(255,255,255,0.75); line-height: 1.8; margin-bottom: 1.5rem; }
+    .testimonial-author { font-size: 0.65rem; letter-spacing: 0.2em; text-transform: uppercase; color: var(--champagne); }
+    .stars { color: var(--champagne); font-size: 0.75rem; margin-bottom: 1rem; }
+
+    /* ─── Footer ─── */
+    footer { background: linear-gradient(135deg, var(--cream) 0%, var(--rose-pale) 100%); padding: 5rem 4rem 3rem; }
+    .footer-top { display: grid; grid-template-columns: 2fr 1fr 1fr 1fr; gap: 4rem; margin-bottom: 4rem; }
+    .footer-brand-name { font-family: var(--serif); font-size: 2rem; font-weight: 300; letter-spacing: 0.15em; color: var(--black); margin-bottom: 1rem; }
+    .footer-brand-desc { font-size: 0.78rem; line-height: 1.9; color: var(--warm-gray); max-width: 260px; }
+    .footer-col h4 { font-size: 0.6rem; font-weight: 300; letter-spacing: 0.25em; text-transform: uppercase; color: var(--black); margin-bottom: 1.5rem; }
+    .footer-col ul { list-style: none; }
+    .footer-col ul li { font-size: 0.78rem; color: var(--warm-gray); margin-bottom: 0.7rem; }
+    .footer-col a { color: inherit; text-decoration: none; transition: color 0.2s; }
+    .footer-col a:hover { color: var(--rose); }
+    .footer-bottom { border-top: 1px solid var(--champagne); padding-top: 2rem; display: flex; justify-content: space-between; align-items: center; }
+    .footer-copy { font-size: 0.65rem; color: var(--warm-gray); letter-spacing: 0.1em; }
+    .footer-social { display: flex; gap: 1.5rem; }
+    .footer-social a { font-size: 0.6rem; letter-spacing: 0.2em; text-transform: uppercase; color: var(--warm-gray); text-decoration: none; transition: color 0.2s; }
+    .footer-social a:hover { color: var(--rose); }
+
+    /* ─── Scroll Animations ─── */
+    .fade-in { opacity: 0; transform: translateY(24px); transition: opacity 0.7s ease, transform 0.7s ease; }
+    .fade-in.visible { opacity: 1; transform: translateY(0); }
+
+    /* ─── Responsive ─── */
+    @media (max-width: 1100px) { .products-grid { grid-template-columns: repeat(3, 1fr); } }
+    @media (max-width: 900px) {
+      nav { padding: 1.2rem 1.5rem; }
+      nav.scrolled { padding: 0.9rem 1.5rem; }
+      .nav-links, .nav-whatsapp { display: none; }
+      .nav-hamburger { display: flex; }
+      .sidebar-overlay { display: block; }
+      section { padding: 5rem 1.5rem; }
+      #error-banner { margin: 1rem 1.5rem; }
+      #about { grid-template-columns: 1fr; gap: 3rem; }
+      .products-grid { grid-template-columns: repeat(2, 1fr); gap: 1.2rem; }
+      .testimonials-grid { grid-template-columns: 1fr; gap: 2rem; }
+      .footer-top { grid-template-columns: 1fr 1fr; gap: 2.5rem; }
+      #gallery { grid-template-columns: repeat(3, 1fr); height: 260px; }
+      #gallery .gallery-item:nth-child(n+4) { display: none; }
+      .lightbox-inner { flex-direction: column; max-height: 92vh; overflow-y: auto; }
+      .lightbox-img { width: 100%; height: 240px; object-fit: cover; }
+    }
+    @media (max-width: 600px) {
+      .products-grid { grid-template-columns: 1fr 1fr; gap: 1rem; }
+      .footer-top { grid-template-columns: 1fr; }
+      .footer-bottom { flex-direction: column; gap: 1rem; text-align: center; }
+      #gallery { grid-template-columns: repeat(2, 1fr); }
+      #gallery .gallery-item:nth-child(n+3) { display: none; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- ── Loading Screen ── -->
+<div id="loader">
+  <div class="loader-text">NOVIA</div>
+  <div class="loader-bar"></div>
+</div>
+
+<!-- ── Sidebar Overlay ── -->
+<div class="sidebar-overlay" id="sidebar-overlay" aria-hidden="true"></div>
+
+<!-- ── Mobile Sidebar ── -->
+<aside class="sidebar" id="sidebar" role="navigation" aria-label="Mobile navigation">
+  <div class="sidebar-logo">NOVIA</div>
+  <div class="sidebar-tagline">Luxury Handmade Bridal</div>
+  <div class="sidebar-divider"></div>
+  <ul class="sidebar-nav">
+    <li><a href="#collection" class="sidebar-link">Collection</a></li>
+    <li><a href="#about" class="sidebar-link">About</a></li>
+    <li><a href="#gallery" class="sidebar-link">Gallery</a></li>
+    <li><a href="#testimonials" class="sidebar-link">Reviews</a></li>
+  </ul>
+  <a href="https://wa.me/201061858848" target="_blank" rel="noopener" class="sidebar-whatsapp">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z"/><path d="M12 0C5.373 0 0 5.373 0 12c0 2.133.558 4.133 1.528 5.868L0 24l6.293-1.497A11.932 11.932 0 0012 24c6.627 0 12-5.373 12-12S18.627 0 12 0zm0 22c-1.854 0-3.6-.503-5.1-1.381l-.363-.215-3.758.895.949-3.668-.237-.377A9.965 9.965 0 012 12C2 6.477 6.477 2 12 2s10 4.477 10 10-4.477 10-10 10z"/></svg>
+    WhatsApp Us
+  </a>
+</aside>
+
+<!-- ── Navbar ── -->
+<nav id="navbar" class="hero-nav">
+  <a href="#hero" class="nav-logo">NOVIA</a>
+  <ul class="nav-links">
+    <li><a href="#collection">Collection</a></li>
+    <li><a href="#about">About</a></li>
+    <li><a href="#gallery">Gallery</a></li>
+    <li><a href="#testimonials">Reviews</a></li>
+  </ul>
+  <a href="https://wa.me/201061858848" target="_blank" rel="noopener" class="nav-whatsapp">WhatsApp Us</a>
+  <button class="nav-hamburger" id="hamburger" aria-label="Open menu" aria-expanded="false" aria-controls="sidebar">
+    <span></span><span></span><span></span>
+  </button>
+</nav>
+
+<!-- ── Hero ── -->
+<section id="hero">
+  <div class="hero-bg"></div>
+  <div class="hero-ornament"></div>
+  <div class="hero-content">
+    <h1 class="hero-title">NOVIA</h1>
+    <p class="hero-subtitle">Luxury Handmade Bridal</p>
+    <div class="hero-divider"></div>
+    <a href="#collection" class="btn-primary">Explore Collection</a>
+  </div>
+  <div class="hero-scroll"><span>Scroll</span><div class="scroll-line"></div></div>
+</section>
+
+<!-- ── About ── -->
+<section id="about">
+  <div class="fade-in">
+    <p class="section-eyebrow">Our Story</p>
+    <h2 class="section-title">Crafted with love,<br><em>made to remember</em></h2>
+    <div class="section-line"></div>
+    <p class="section-desc">Every piece in the NOVIA collection is lovingly handcrafted for the modern bride. We believe your wedding day deserves nothing less than perfection.</p>
+  </div>
+  <div class="about-stats fade-in">
+    <div class="stat-card"><div class="stat-number">500+</div><div class="stat-label">Happy Brides</div></div>
+    <div class="stat-card"><div class="stat-number">100%</div><div class="stat-label">Handmade</div></div>
+    <div class="stat-card"><div class="stat-number">48h</div><div class="stat-label">Express Delivery</div></div>
+    <div class="stat-card"><div class="stat-number">∞</div><div class="stat-label">Bespoke Options</div></div>
+  </div>
+</section>
+
+<!-- ── Collection ── -->
+<section id="collection">
+  <div class="collection-header fade-in">
+    <p class="section-eyebrow">The Collection</p>
+    <h2 class="section-title">Bridal Essentials</h2>
+    <div class="section-line"></div>
+    <p class="section-desc">Thoughtfully curated pieces for every moment of your wedding journey.</p>
+  </div>
+
+  <!-- Error banner — shown if Firebase is misconfigured -->
+  <div id="error-banner" role="alert">
+    <strong>Could not connect to the product database.</strong>
+    Showing example products instead. If you are the site owner, check your Firebase configuration.
+  </div>
+
+  <div class="filters">
+    <button class="filter-btn active" data-filter="all">All</button>
+    <button class="filter-btn" data-filter="bouquets">Bouquets</button>
+    <button class="filter-btn" data-filter="gifts">Gifts</button>
+    <button class="filter-btn" data-filter="accessories">Accessories</button>
+  </div>
+  <div class="products-grid" id="products-grid"></div>
+</section>
+
+<!-- ── Gallery ── -->
+<div id="gallery">
+  <div class="gallery-item"><img src="https://images.unsplash.com/photo-1515934751635-c81c6bc9a2d8?w=400&q=75" alt="Bridal" loading="lazy" /></div>
+  <div class="gallery-item"><img src="https://images.unsplash.com/photo-1510172951991-856a654063f9?w=400&q=75" alt="Bridal" loading="lazy" /></div>
+  <div class="gallery-item"><img src="https://images.unsplash.com/photo-1491438590914-bc09fcaaf77a?w=400&q=75" alt="Bridal" loading="lazy" /></div>
+  <div class="gallery-item"><img src="https://images.unsplash.com/photo-1520854221256-17451cc331bf?w=400&q=75" alt="Bridal" loading="lazy" /></div>
+  <div class="gallery-item"><img src="https://images.unsplash.com/photo-1522673607200-164d1b6ce486?w=400&q=75" alt="Bridal" loading="lazy" /></div>
+</div>
+
+<!-- ── Testimonials ── -->
+<section id="testimonials">
+  <p class="section-eyebrow testimonials-eyebrow fade-in">Love Notes</p>
+  <h2 class="section-title fade-in" style="color:#fff;">What Brides Are Saying</h2>
+  <div class="testimonials-grid">
+    <div class="testimonial-card fade-in"><div class="stars">★★★★★</div><p class="testimonial-quote">"My bridal bouquet was absolutely breathtaking. Every single rose was perfect. NOVIA made my dream wedding a reality."</p><p class="testimonial-author">— Sara M., Cairo</p></div>
+    <div class="testimonial-card fade-in"><div class="stars">★★★★★</div><p class="testimonial-quote">"The personalized bridal box was the most thoughtful gift. My bridesmaids cried when they opened them."</p><p class="testimonial-author">— Layla R., Alexandria</p></div>
+    <div class="testimonial-card fade-in"><div class="stars">★★★★★</div><p class="testimonial-quote">"From the flower crown to the mirror set, every detail was exquisite. NOVIA understands what luxury truly means."</p><p class="testimonial-author">— Nour K., Dubai</p></div>
+  </div>
+</section>
+
+<!-- ── Footer ── -->
+<footer>
+  <div class="footer-top">
+    <div>
+      <div class="footer-brand-name">NOVIA</div>
+      <p class="footer-brand-desc">Luxury handmade bridal pieces crafted with love for your most important day.</p>
+    </div>
+    <div class="footer-col"><h4>Collection</h4><ul><li><a href="#collection">Bouquets</a></li><li><a href="#collection">Gift Boxes</a></li><li><a href="#collection">Accessories</a></li><li><a href="#collection">Bespoke Orders</a></li></ul></div>
+    <div class="footer-col"><h4>Information</h4><ul><li><a href="#about">About NOVIA</a></li><li><a href="#testimonials">Reviews</a></li><li>Custom Orders</li><li>Shipping Policy</li></ul></div>
+    <div class="footer-col"><h4>Contact</h4><ul><li><a href="https://wa.me/201061858848" target="_blank">WhatsApp</a></li><li>+20 106 185 8848</li><li>Instagram</li><li>Facebook</li></ul></div>
+  </div>
+  <div class="footer-bottom">
+    <p class="footer-copy">© 2025 NOVIA Luxury Handmade Bridal. All rights reserved.</p>
+    <div class="footer-social"><a href="https://wa.me/201061858848" target="_blank">WhatsApp</a><a href="#">Instagram</a><a href="#">Facebook</a></div>
+  </div>
+</footer>
+
+<!-- ── Lightbox ── -->
+<div id="lightbox" role="dialog" aria-modal="true" aria-label="Product detail">
+  <div class="lightbox-inner">
+    <img class="lightbox-img" id="lb-img" src="" alt="" />
+    <div class="lightbox-details">
+      <p class="lightbox-category" id="lb-cat"></p>
+      <h2 class="lightbox-name" id="lb-name"></h2>
+      <p class="lightbox-price" id="lb-price"></p>
+      <p class="lightbox-desc" id="lb-desc"></p>
+      <a class="btn-whatsapp" id="lb-btn" href="#" target="_blank" rel="noopener">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z"/><path d="M12 0C5.373 0 0 5.373 0 12c0 2.133.558 4.133 1.528 5.868L0 24l6.293-1.497A11.932 11.932 0 0012 24c6.627 0 12-5.373 12-12S18.627 0 12 0zm0 22c-1.854 0-3.6-.503-5.1-1.381l-.363-.215-3.758.895.949-3.668-.237-.377A9.965 9.965 0 012 12C2 6.477 6.477 2 12 2s10 4.477 10 10-4.477 10-10 10z"/></svg>
+        Order on WhatsApp
+      </a>
+    </div>
+    <button class="lightbox-close" id="lb-close" aria-label="Close">✕</button>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════════════════════
+     FIREBASE SDK + APPLICATION LOGIC
+     ════════════════════════════════════════════════════════════ -->
+<script type="module">
+  /* ── Firebase SDK imports ───────────────────────────────── */
+  import { initializeApp }  from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+  import {
+    getFirestore,
+    collection,
+    getDocs,
+    orderBy,
+    query
+  } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+  /* ══════════════════════════════════════════════════════════
+     🔧 PASTE YOUR FIREBASE CONFIG HERE
+        Firebase Console → Project Settings → General
+        → Your apps → Web app → firebaseConfig
+     ══════════════════════════════════════════════════════════ */
+
+const firebaseConfig = {
+  apiKey: "AIzaSyCt7YDqTI9jxtO_ZSn-aVx9bgeYfxEQAzM",
+  authDomain: "novia-a73a0.firebaseapp.com",
+  projectId: "novia-a73a0",
+  storageBucket: "novia-a73a0.firebasestorage.app",
+  messagingSenderId: "966486124513",
+  appId: "1:966486124513:web:0da547b098bbe76b7094a0",
+  measurementId: "G-9CQL917JR2"
+};
+
+
+
+  /* ── Offline-first seed products ────────────────────────────
+     Shown when:
+       1. No Firebase config yet (apiKey is still "YOUR_API_KEY")
+       2. Firebase is unreachable (network error, rules issue, etc.)
+       3. The products collection is empty
+     This means the site NEVER shows a broken blank grid.
+  ──────────────────────────────────────────────────────────── */
+  const SEED_PRODUCTS = [
+    { id:"s1", name:"White Rose Bridal Bouquet",  price:"850 EGP",  category:"bouquets",    desc:"A classic cascade of premium white roses, hand-tied with ivory satin ribbon.",            image:"https://images.unsplash.com/photo-1465495976277-4387d4b0b4c6?w=600&q=80" },
+    { id:"s2", name:"Blush Peony Bouquet",         price:"790 EGP",  category:"bouquets",    desc:"Soft blush peonies and garden roses in a lush, romantic style. Ethereally timeless.",   image:"https://images.unsplash.com/photo-1490750967868-88df5691cc78?w=600&q=80" },
+    { id:"s3", name:"Personalized Bridal Box",      price:"1200 EGP", category:"gifts",       desc:"A curated luxury box engraved with the bride's name. Filled with keepsakes.",          image:"https://images.unsplash.com/photo-1549465220-1a8b9238cd48?w=600&q=80" },
+    { id:"s4", name:"Elegant Hand Mirror",           price:"450 EGP",  category:"accessories", desc:"A beautifully crafted vanity mirror with an ornate gold-trimmed handle.",              image:"https://images.unsplash.com/photo-1522337360788-8b13dee7a37e?w=600&q=80" },
+    { id:"s5", name:"Flower Crown",                  price:"380 EGP",  category:"accessories", desc:"A hand-wired crown of baby's breath, roses, and eucalyptus. Bohemian perfection.",     image:"https://images.unsplash.com/photo-1519657742404-b8e49c74ef5c?w=600&q=80" },
+    { id:"s6", name:"Bridesmaid Gift Box",            price:"650 EGP",  category:"gifts",       desc:"Thank your tribe in luxury style. Personalized tokens of appreciation.",               image:"https://images.unsplash.com/photo-1512909006721-3d6018887383?w=600&q=80" },
+    { id:"s7", name:"Luxury Mirror Set",              price:"700 EGP",  category:"accessories", desc:"A matching hand mirror and comb set in ivory and gold — an heirloom-quality gift.",    image:"https://images.unsplash.com/photo-1596462502278-27bfdc403348?w=600&q=80" },
+    { id:"s8", name:"Wedding Perfume Set",             price:"950 EGP",  category:"gifts",       desc:"Two bespoke floral fragrances — one for her, one to remember the day by.",            image:"https://images.unsplash.com/photo-1541643600914-78b084683702?w=600&q=80" }
+  ];
+
+  /* ── Category label map ─────────────────────────────────── */
+  const CAT_LABEL = { bouquets:"Bouquets", gifts:"Gifts", accessories:"Accessories" };
+
+  /* ── Google Drive URL converter ─────────────────────────────
+     Converts any Google Drive share link to a direct image URL.
+     Input:  https://drive.google.com/file/d/FILE_ID/view
+     Output: https://drive.google.com/uc?export=view&id=FILE_ID
+  ──────────────────────────────────────────────────────────── */
+  function driveUrl(url) {
+    if (!url) return '';
+    const m = url.match(/(?:\/d\/|id=)([a-zA-Z0-9_-]{25,})/);
+    return m ? `https://drive.google.com/uc?export=view&id=${m[1]}` : url;
+  }
+
+  /* ── Image error fallback ───────────────────────────────── */
+  function imgFallback(img) {
+    img.onerror = () => {
+      img.src = 'https://images.unsplash.com/photo-1465495976277-4387d4b0b4c6?w=600&q=60';
+      img.onerror = null; // prevent infinite loop
+    };
+  }
+
+  /* ── App state ──────────────────────────────────────────── */
+  let allProducts  = [];
+  let activeFilter = 'all';
+  let usingFallback = false;
+
+  const grid        = document.getElementById('products-grid');
+  const errorBanner = document.getElementById('error-banner');
+
+  /* ── Skeleton loading UI ────────────────────────────────── */
+  function showSkeletons(n = 8) {
+    grid.innerHTML = Array(n).fill(0).map(() => `
+      <div class="skeleton-card">
+        <div class="skeleton-img"></div>
+        <div class="skeleton-line short"></div>
+        <div class="skeleton-line med"></div>
+        <div class="skeleton-line"></div>
+      </div>`).join('');
+  }
+
+  /* ── Render product grid ────────────────────────────────── */
+  function renderProducts(filter) {
+    activeFilter = filter;
+    const list = filter === 'all'
+      ? allProducts
+      : allProducts.filter(p => p.category === filter);
+
+    grid.innerHTML = '';
+
+    if (!list.length) {
+      grid.innerHTML = `<div class="no-products"><p>No products in this category yet.</p></div>`;
+      return;
+    }
+
+    list.forEach((p, i) => {
+      const imgSrc = driveUrl(p.image || p.img || '');
+      const card   = document.createElement('article');
+      card.className = 'product-card fade-in';
+      card.style.transitionDelay = (i * 70) + 'ms';
+
+      card.innerHTML = `
+        <div class="card-image">
+          <img src="${imgSrc}" alt="${p.name}" loading="lazy" />
+          <div class="card-overlay">
+            <button class="card-overlay-btn">Quick View</button>
+          </div>
+        </div>
+        <p class="card-category">${CAT_LABEL[p.category] || p.category}</p>
+        <h3 class="card-name">${p.name}</h3>
+        ${p.price ? `<p class="card-price">${p.price}</p>` : ''}
+        <p class="card-desc">${p.desc || ''}</p>
+        <span class="card-tag">Order via WhatsApp</span>`;
+
+      imgFallback(card.querySelector('img'));
+      card.querySelector('.card-overlay-btn').addEventListener('click', e => {
+        e.stopPropagation();
+        openLightbox(p);
+      });
+      card.addEventListener('click', () => openLightbox(p));
+      grid.appendChild(card);
+      fadeObserver.observe(card);
+    });
+  }
+
+  /* ── Show in-grid error with retry button ────────────────── */
+  function showGridError(msg) {
+    grid.innerHTML = `
+      <div class="firebase-error">
+        <h3>Could not load products</h3>
+        <p>${msg}<br>Showing sample products — your data is safe.</p>
+        <button class="retry-btn" onclick="window.location.reload()">Retry</button>
+      </div>`;
+  }
+
+  /* ── Lightbox ───────────────────────────────────────────── */
+  const lb      = document.getElementById('lightbox');
+  const lbImg   = document.getElementById('lb-img');
+  const lbCat   = document.getElementById('lb-cat');
+  const lbName  = document.getElementById('lb-name');
+  const lbPrice = document.getElementById('lb-price');
+  const lbDesc  = document.getElementById('lb-desc');
+  const lbBtn   = document.getElementById('lb-btn');
+
+  function openLightbox(p) {
+    lbImg.src  = driveUrl(p.image || p.img || '');
+    lbImg.alt  = p.name;
+    imgFallback(lbImg);
+    lbCat.textContent   = CAT_LABEL[p.category] || p.category;
+    lbName.textContent  = p.name;
+    lbPrice.textContent = p.price || '';
+    lbDesc.textContent  = p.desc  || '';
+    lbBtn.href = `https://wa.me/201061858848?text=${encodeURIComponent('Hello, I would like to order: ' + p.name)}`;
+    lb.classList.add('open');
+    document.body.style.overflow = 'hidden';
+  }
+  function closeLightbox() {
+    lb.classList.remove('open');
+    document.body.style.overflow = '';
+  }
+  document.getElementById('lb-close').addEventListener('click', closeLightbox);
+  lb.addEventListener('click', e => { if (e.target === lb) closeLightbox(); });
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') closeLightbox(); });
+
+  /* ── Filter buttons ─────────────────────────────────────── */
+  document.querySelectorAll('.filter-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      renderProducts(btn.dataset.filter);
+    });
+  });
+
+  /* ── Scroll fade-in observer ────────────────────────────── */
+  const fadeObserver = new IntersectionObserver(entries => {
+    entries.forEach(e => { if (e.isIntersecting) e.target.classList.add('visible'); });
+  }, { threshold: 0.1 });
+  document.querySelectorAll('.fade-in').forEach(el => fadeObserver.observe(el));
+
+  /* ── Navbar scroll ──────────────────────────────────────── */
+  const navbar = document.getElementById('navbar');
+  window.addEventListener('scroll', () => {
+    if (window.scrollY > 80) { navbar.classList.add('scrolled'); navbar.classList.remove('hero-nav'); }
+    else                      { navbar.classList.remove('scrolled'); navbar.classList.add('hero-nav'); }
+  }, { passive: true });
+
+  /* ── Mobile Sidebar ─────────────────────────────────────── */
+  const hamburger = document.getElementById('hamburger');
+  const sidebar   = document.getElementById('sidebar');
+  const overlay   = document.getElementById('sidebar-overlay');
+
+  function openSidebar() {
+    sidebar.classList.add('open'); overlay.classList.add('open');
+    hamburger.classList.add('open'); hamburger.setAttribute('aria-expanded','true');
+    document.body.style.overflow = 'hidden';
+  }
+  function closeSidebar() {
+    sidebar.classList.remove('open'); overlay.classList.remove('open');
+    hamburger.classList.remove('open'); hamburger.setAttribute('aria-expanded','false');
+    document.body.style.overflow = '';
+  }
+  hamburger.addEventListener('click', () => sidebar.classList.contains('open') ? closeSidebar() : openSidebar());
+  overlay.addEventListener('click', closeSidebar);
+  document.querySelectorAll('.sidebar-link').forEach(a => a.addEventListener('click', closeSidebar));
+
+  /* ── Loader hide ────────────────────────────────────────── */
+  function hideLoader() {
+    setTimeout(() => document.getElementById('loader').classList.add('hidden'), 1800);
+  }
+
+  /* ══════════════════════════════════════════════════════════
+     FIREBASE PRODUCT LOADING
+     ──────────────────────────────────────────────────────────
+     Strategy:
+       1. If config is unconfigured → skip Firebase, use seeds silently
+       2. If Firebase succeeds + has products → use Firestore data
+       3. If Firebase succeeds but collection is empty → use seeds silently
+       4. If Firebase throws any error → use seeds + show error banner
+          (permission-denied = rules not set yet; unavailable = network)
+     The site NEVER shows a blank collection regardless of Firebase state.
+  ══════════════════════════════════════════════════════════ */
+  async function loadProducts() {
+    showSkeletons(8);
+
+    const isConfigured = firebaseConfig.apiKey !== 'YOUR_API_KEY';
+
+    if (!isConfigured) {
+      /* Not yet configured — run silently on seeds */
+      allProducts = SEED_PRODUCTS;
+      renderProducts(activeFilter);
+      hideLoader();
+      return;
+    }
+
+    try {
+      /* Initialise Firebase app */
+      const app = initializeApp(firebaseConfig);
+      const db  = getFirestore(app);
+
+      /* Query products ordered newest first */
+      const q    = query(collection(db, 'products'), orderBy('createdAt', 'desc'));
+      const snap = await getDocs(q);
+
+      if (!snap.empty) {
+        /* ✅ Got real products from Firestore */
+        allProducts = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      } else {
+        /* Firestore is connected but collection is empty — use seeds */
+        allProducts = SEED_PRODUCTS;
+      }
+
+    } catch (err) {
+      /*
+        Common errors and what they mean:
+          permission-denied  → Firestore rules are blocking reads
+                               (test mode expired, or rules not updated)
+          unavailable        → Network error or Firebase down
+          not-found          → projectId is wrong
+
+        In ALL cases: show seeds so the site keeps working,
+        and display the error banner for the site owner.
+      */
+      console.error('[NOVIA] Firebase error:', err.code, err.message);
+
+      usingFallback = true;
+      allProducts = SEED_PRODUCTS;
+
+      /* Show the friendly error banner above the filters */
+      errorBanner.classList.add('visible');
+    }
+
+    renderProducts(activeFilter);
+    hideLoader();
+  }
+
+  loadProducts();
+</script>
+</body>
+</html>

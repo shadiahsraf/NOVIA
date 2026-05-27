@@ -1,0 +1,56 @@
+// ═══════════════════════════════════════════════════════════════
+// NOVIA — Firestore Security Rules (Production-Ready)
+// ═══════════════════════════════════════════════════════════════
+//
+// HOW TO DEPLOY THESE RULES:
+// Option A (Console):
+//   1. Go to Firebase Console → Firestore Database → Rules tab
+//   2. Delete the existing rules and paste this entire file
+//   3. Click "Publish"
+//
+// Option B (CLI):
+//   1. Install Firebase CLI: npm install -g firebase-tools
+//   2. Run: firebase login
+//   3. Run: firebase deploy --only firestore:rules
+//
+// ─────────────────────────────────────────────────────────────
+// WHAT THESE RULES DO:
+//   ✅ Anyone (public) can READ the products collection
+//      → Your website visitors see products without logging in
+//   🔒 Only authenticated admins can WRITE (add/edit/delete)
+//      → Public users cannot modify any data — ever
+//   🔒 All other collections are fully locked by default
+//      → No accidental exposure of other data
+// ═══════════════════════════════════════════════════════════════
+
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ── Products collection ─────────────────────────────────────
+    // Public read: anyone can view product listings on the website
+    // Protected write: only signed-in admin can create/update/delete
+    match /products/{productId} {
+      allow read:   if true;
+      allow create: if isAdmin();
+      allow update: if isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    // ── Helper function ─────────────────────────────────────────
+    // isAdmin() returns true only when:
+    //   1. The request comes from a signed-in Firebase Auth user
+    //   2. (Optional) You can extend this to check a custom claim
+    //      e.g.: request.auth.token.admin == true
+    function isAdmin() {
+      return request.auth != null;
+    }
+
+    // ── Deny everything else by default ─────────────────────────
+    // Any collection not explicitly matched above is fully locked.
+    // This is Firestore's default — made explicit here for clarity.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

@@ -1,0 +1,579 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>NOVIA — Admin</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;0,600;1,300;1,400&family=Jost:wght@200;300;400&display=swap" rel="stylesheet" />
+
+  <!--
+  ═══════════════════════════════════════════════════════════
+  ADMIN PANEL SECURITY — HOW IT WORKS
+  ═══════════════════════════════════════════════════════════
+
+  Authentication flow:
+    1. Admin enters email + password on login screen
+    2. Firebase Auth verifies the credentials
+    3. On success → admin screen is revealed
+    4. On logout → login screen reappears
+    5. onAuthStateChanged() re-checks on every page load
+       → page doesn't flash admin content before auth check
+
+  Firestore write protection:
+    - Firestore rules (firestore.rules) require request.auth != null
+    - Firebase SDK enforces this server-side — even if someone
+      bypasses the UI, they CANNOT write without a valid auth token
+    - The "Add Product" button is hidden until auth is confirmed
+
+  SECURITY NOTE:
+    admin.html itself is a public file (Netlify serves everything).
+    The protection is in FIREBASE RULES — not the HTML.
+    An unauthenticated user who opens admin.html sees only the
+    login form and cannot save anything to Firestore.
+
+  TO CREATE YOUR ADMIN USER:
+    Firebase Console → Authentication → Users → Add user
+    Enter your email + a strong password (12+ chars recommended)
+  ═══════════════════════════════════════════════════════════
+  -->
+
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --ivory:          #fdf6f0;
+      --cream:          #f7ede4;
+      --blush:          #eecfc0;
+      --warm-gray:      #b89a8e;
+      --charcoal:       #3a2a25;
+      --black:          #2a1a14;
+      --rose:           #d4896e;
+      --rose-pale:      #f2ddd5;
+      --champagne:      #e8c9a0;
+      --champagne-deep: #c9a06a;
+      --success:        #7aaa8a;
+      --error:          #c46a5a;
+      --serif: 'Cormorant Garamond', Georgia, serif;
+      --sans:  'Jost', sans-serif;
+    }
+    body { background: var(--cream); color: var(--charcoal); font-family: var(--sans); font-weight: 300; min-height: 100vh; }
+
+    /* ── Auth guard: hide admin until Firebase confirms auth ── */
+    /* Both screens start hidden; JS reveals the right one */
+    #login-screen { display: none; }
+    #admin-screen { display: none; }
+
+    /* ── Top Bar ── */
+    .admin-bar { background: var(--black); display: flex; align-items: center; justify-content: space-between; padding: 1rem 2.5rem; }
+    .admin-bar-logo { font-family: var(--serif); font-size: 1.3rem; font-weight: 300; letter-spacing: 0.2em; color: #fff; text-decoration: none; }
+    .admin-bar-title { font-size: 0.6rem; font-weight: 300; letter-spacing: 0.3em; text-transform: uppercase; color: var(--champagne); }
+    .btn-logout { font-size: 0.6rem; letter-spacing: 0.15em; text-transform: uppercase; color: rgba(255,255,255,0.5); background: none; border: 1px solid rgba(255,255,255,0.2); padding: 0.5rem 1rem; cursor: pointer; transition: all 0.2s; }
+    .btn-logout:hover { color: #fff; border-color: rgba(255,255,255,0.5); }
+
+    /* ── Login Screen ── */
+    #login-screen {
+      min-height: 100vh;
+      align-items: center; justify-content: center;
+      background: linear-gradient(135deg, #2a1a14 0%, #4a2a1e 100%);
+    }
+    .login-card { background: var(--ivory); padding: 3.5rem; width: min(420px, 92vw); }
+    .login-logo { font-family: var(--serif); font-size: 2.5rem; font-weight: 300; letter-spacing: 0.2em; color: var(--black); margin-bottom: 0.4rem; text-align: center; }
+    .login-sub { font-size: 0.6rem; letter-spacing: 0.3em; text-transform: uppercase; color: var(--rose); text-align: center; margin-bottom: 2.5rem; }
+    .login-divider { width: 50px; height: 1px; background: linear-gradient(to right, var(--champagne-deep), var(--rose)); margin: 0 auto 2.5rem; }
+
+    /* ── Form Shared ── */
+    .form-group { margin-bottom: 1.4rem; }
+    .form-label { display: block; font-size: 0.6rem; letter-spacing: 0.2em; text-transform: uppercase; color: var(--warm-gray); margin-bottom: 0.5rem; }
+    .form-input, .form-select, .form-textarea {
+      width: 100%; font-family: var(--sans); font-size: 0.85rem; font-weight: 300;
+      color: var(--charcoal); background: #fff;
+      border: 1px solid var(--blush); padding: 0.8rem 1rem;
+      outline: none; transition: border-color 0.2s ease; appearance: none;
+    }
+    .form-input:focus, .form-select:focus, .form-textarea:focus { border-color: var(--rose); }
+    .form-textarea { resize: vertical; min-height: 90px; }
+    .form-hint { font-size: 0.65rem; color: var(--warm-gray); margin-top: 0.35rem; line-height: 1.5; }
+
+    /* Field error state */
+    .form-input.invalid { border-color: var(--error); }
+    .field-error { font-size: 0.65rem; color: var(--error); margin-top: 0.3rem; display: none; }
+    .field-error.visible { display: block; }
+
+    .btn-submit {
+      width: 100%; font-size: 0.65rem; font-weight: 300;
+      letter-spacing: 0.25em; text-transform: uppercase; color: #fff;
+      background: linear-gradient(135deg, var(--champagne-deep), var(--rose));
+      border: none; padding: 1rem; cursor: pointer; transition: opacity 0.25s ease;
+    }
+    .btn-submit:hover { opacity: 0.88; }
+    .btn-submit:disabled { opacity: 0.45; cursor: not-allowed; }
+
+    /* ── Toast ── */
+    #toast {
+      position: fixed; bottom: 2rem; left: 50%; transform: translateX(-50%);
+      background: var(--black); color: #fff;
+      font-size: 0.75rem; letter-spacing: 0.1em;
+      padding: 0.9rem 2rem; opacity: 0; pointer-events: none;
+      transition: opacity 0.3s ease; z-index: 999; white-space: nowrap;
+    }
+    #toast.show { opacity: 1; }
+    #toast.success { background: var(--success); }
+    #toast.error   { background: var(--error); }
+
+    /* ── Admin Layout ── */
+    .admin-layout { display: grid; grid-template-columns: 380px 1fr; gap: 2rem; max-width: 1300px; margin: 2rem auto; padding: 0 2rem; }
+    .admin-card { background: var(--ivory); padding: 2.5rem; height: fit-content; position: sticky; top: 2rem; }
+    .admin-card-title { font-family: var(--serif); font-size: 1.6rem; font-weight: 300; color: var(--black); margin-bottom: 0.4rem; }
+    .admin-card-sub { font-size: 0.6rem; letter-spacing: 0.2em; text-transform: uppercase; color: var(--rose); margin-bottom: 1.5rem; }
+    .admin-divider { width: 40px; height: 1px; background: linear-gradient(to right, var(--champagne-deep), var(--rose)); margin-bottom: 2rem; }
+
+    /* Image preview */
+    .img-preview { width: 100%; aspect-ratio: 4/3; object-fit: cover; display: none; margin-top: 0.5rem; border: 1px solid var(--blush); }
+
+    /* ── Product List ── */
+    .product-list-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 1.5rem; }
+    .product-list-title { font-family: var(--serif); font-size: 1.6rem; font-weight: 300; color: var(--black); }
+    .product-count { font-size: 0.6rem; letter-spacing: 0.2em; text-transform: uppercase; color: var(--warm-gray); }
+    .product-list { display: flex; flex-direction: column; gap: 1rem; }
+    .product-row { background: var(--ivory); display: grid; grid-template-columns: 80px 1fr auto; gap: 1rem; align-items: center; padding: 1rem; transition: box-shadow 0.2s; }
+    .product-row:hover { box-shadow: 0 2px 16px rgba(42,26,20,0.08); }
+    .product-row-img { width: 80px; height: 80px; object-fit: cover; background: var(--cream); display: block; }
+    .product-row-name { font-family: var(--serif); font-size: 1.05rem; font-weight: 400; color: var(--black); margin-bottom: 0.2rem; }
+    .product-row-meta { font-size: 0.65rem; color: var(--warm-gray); }
+    .product-row-cat { display: inline-block; font-size: 0.5rem; letter-spacing: 0.15em; text-transform: uppercase; color: var(--rose); border: 1px solid var(--champagne); padding: 0.2rem 0.5rem; margin-top: 0.3rem; }
+    .btn-delete { font-size: 0.55rem; letter-spacing: 0.15em; text-transform: uppercase; color: var(--warm-gray); background: none; border: 1px solid var(--blush); padding: 0.4rem 0.8rem; cursor: pointer; transition: all 0.2s; white-space: nowrap; }
+    .btn-delete:hover { color: var(--error); border-color: var(--error); }
+    .list-empty { text-align: center; padding: 3rem; background: var(--ivory); }
+    .list-empty p { font-family: var(--serif); font-size: 1.1rem; font-weight: 300; color: var(--warm-gray); }
+    .list-error { background: #fdf0ee; border: 1px solid #e8a090; padding: 1.5rem; text-align: center; }
+    .list-error p { font-size: 0.82rem; color: #a03020; line-height: 1.7; }
+
+    /* Skeleton */
+    .row-skeleton { height: 100px; background: linear-gradient(90deg, var(--cream) 25%, var(--blush) 50%, var(--cream) 75%); background-size: 200% 100%; animation: shimmer 1.4s infinite; }
+    @keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+
+    /* Responsive */
+    @media (max-width: 900px) { .admin-layout { grid-template-columns: 1fr; } .admin-card { position: static; } }
+  </style>
+</head>
+<body>
+
+<div id="toast" role="alert" aria-live="polite"></div>
+
+<!-- ══════════════════════════════════
+     LOGIN SCREEN
+     Shown to unauthenticated visitors
+══════════════════════════════════ -->
+<div id="login-screen">
+  <div class="login-card">
+    <div class="login-logo">NOVIA</div>
+    <p class="login-sub">Admin Panel</p>
+    <div class="login-divider"></div>
+
+    <div class="form-group">
+      <label class="form-label" for="login-email">Email</label>
+      <input class="form-input" type="email" id="login-email" placeholder="admin@novia.com" autocomplete="email" />
+      <p class="field-error" id="email-error">Please enter a valid email address.</p>
+    </div>
+    <div class="form-group">
+      <label class="form-label" for="login-password">Password</label>
+      <input class="form-input" type="password" id="login-password" placeholder="••••••••" autocomplete="current-password" />
+      <p class="field-error" id="pass-error">Password is required.</p>
+    </div>
+
+    <!-- Login error message (wrong credentials etc.) -->
+    <p id="login-error" style="font-size:0.75rem;color:#c46a5a;margin-bottom:1rem;display:none;line-height:1.5;"></p>
+
+    <button class="btn-submit" id="login-btn">Sign In</button>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════
+     ADMIN SCREEN
+     Revealed only after auth confirms
+══════════════════════════════════ -->
+<div id="admin-screen">
+  <div class="admin-bar">
+    <a href="index.html" class="admin-bar-logo">NOVIA</a>
+    <span class="admin-bar-title">Admin Panel</span>
+    <button class="btn-logout" id="logout-btn">Sign Out</button>
+  </div>
+
+  <div class="admin-layout">
+
+    <!-- ── Add Product Form ── -->
+    <div class="admin-card">
+      <div class="admin-card-title">Add Product</div>
+      <div class="admin-card-sub">New Collection Item</div>
+      <div class="admin-divider"></div>
+
+      <form id="product-form" novalidate>
+
+        <div class="form-group">
+          <label class="form-label" for="p-name">Product Name *</label>
+          <input class="form-input" type="text" id="p-name" placeholder="e.g. White Rose Bouquet" required />
+          <p class="field-error" id="name-error">Product name is required.</p>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="p-price">Price</label>
+          <input class="form-input" type="text" id="p-price" placeholder="e.g. 850 EGP" />
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="p-category">Category *</label>
+          <select class="form-select" id="p-category" required>
+            <option value="" disabled selected>Select category…</option>
+            <option value="bouquets">Bouquets</option>
+            <option value="gifts">Gifts</option>
+            <option value="accessories">Accessories</option>
+          </select>
+          <p class="field-error" id="cat-error">Please select a category.</p>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="p-desc">Description</label>
+          <textarea class="form-textarea" id="p-desc" placeholder="A short elegant description…"></textarea>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="p-image">Image URL</label>
+          <input class="form-input" type="url" id="p-image" placeholder="https://… or Google Drive share link" />
+          <p class="form-hint">
+            Paste any image URL or a Google Drive share link.<br>
+            Make sure Drive files are set to <strong>"Anyone with the link"</strong>.
+          </p>
+          <img id="img-preview" class="img-preview" alt="Image preview" />
+        </div>
+
+        <button class="btn-submit" type="submit" id="submit-btn">Add Product</button>
+      </form>
+    </div>
+
+    <!-- ── Product List ── -->
+    <div>
+      <div class="product-list-header">
+        <h2 class="product-list-title">All Products</h2>
+        <span class="product-count" id="product-count">Loading…</span>
+      </div>
+      <div class="product-list" id="product-list">
+        <div class="row-skeleton"></div>
+        <div class="row-skeleton"></div>
+        <div class="row-skeleton"></div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════════════════════
+     FIREBASE — paste your config in firebaseConfig below
+     Same config as index.html
+════════════════════════════════════════════════════════════ -->
+<script type="module">
+  /* ── Firebase imports ──────────────────────────────────────── */
+  import { initializeApp }  from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+  import {
+    getFirestore,
+    collection, getDocs, addDoc, deleteDoc, doc,
+    serverTimestamp, orderBy, query
+  } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+  import {
+    getAuth,
+    signInWithEmailAndPassword,
+    signOut,
+    onAuthStateChanged
+  } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+
+  /* ══════════════════════════════════════════════════════════
+     🔧 PASTE YOUR FIREBASE CONFIG HERE (same as index.html)
+  ══════════════════════════════════════════════════════════ */
+
+const firebaseConfig = {
+  apiKey: "AIzaSyCt7YDqTI9jxtO_ZSn-aVx9bgeYfxEQAzM",
+  authDomain: "novia-a73a0.firebaseapp.com",
+  projectId: "novia-a73a0",
+  storageBucket: "novia-a73a0.firebasestorage.app",
+  messagingSenderId: "966486124513",
+  appId: "1:966486124513:web:0da547b098bbe76b7094a0",
+  measurementId: "G-9CQL917JR2"
+};
+
+
+
+  /* ── Initialise Firebase ──────────────────────────────────── */
+  const app  = initializeApp(firebaseConfig);
+  const db   = getFirestore(app);
+  const auth = getAuth(app);
+
+  /* ── Category label map ───────────────────────────────────── */
+  const CAT_LABEL = { bouquets:"Bouquets", gifts:"Gifts", accessories:"Accessories" };
+
+  /* ── Google Drive URL converter ───────────────────────────── */
+  function driveUrl(url) {
+    if (!url) return '';
+    const m = url.match(/(?:\/d\/|id=)([a-zA-Z0-9_-]{25,})/);
+    return m ? `https://drive.google.com/uc?export=view&id=${m[1]}` : url;
+  }
+
+  /* ── Toast helper ─────────────────────────────────────────── */
+  function toast(msg, type = '') {
+    const t = document.getElementById('toast');
+    t.textContent = msg;
+    t.className   = `show ${type}`;
+    setTimeout(() => { t.className = ''; }, 3500);
+  }
+
+  /* ── UI screen references ─────────────────────────────────── */
+  const loginScreen = document.getElementById('login-screen');
+  const adminScreen = document.getElementById('admin-screen');
+
+  /* ════════════════════════════════════════════════════════════
+     AUTH STATE LISTENER
+     ──────────────────────────────────────────────────────────
+     onAuthStateChanged fires immediately on page load.
+     - If user is already signed in → show admin, load products
+     - If not signed in → show login form
+     This prevents the admin UI flashing before auth is checked.
+  ════════════════════════════════════════════════════════════ */
+  onAuthStateChanged(auth, user => {
+    if (user) {
+      /* Signed in — show admin panel */
+      loginScreen.style.display = 'none';
+      adminScreen.style.display = 'block';
+      loadProducts();
+    } else {
+      /* Not signed in — show login form */
+      loginScreen.style.display = 'flex';
+      adminScreen.style.display = 'none';
+    }
+  });
+
+  /* ════════════════════════════════════════════════════════════
+     LOGIN
+  ════════════════════════════════════════════════════════════ */
+  document.getElementById('login-btn').addEventListener('click', async () => {
+    const emailEl = document.getElementById('login-email');
+    const passEl  = document.getElementById('login-password');
+    const loginErr = document.getElementById('login-error');
+    const emailErr = document.getElementById('email-error');
+    const passErr  = document.getElementById('pass-error');
+
+    /* Reset previous errors */
+    [emailEl, passEl].forEach(el => el.classList.remove('invalid'));
+    [emailErr, passErr].forEach(el => el.classList.remove('visible'));
+    loginErr.style.display = 'none';
+
+    let valid = true;
+    if (!emailEl.value.includes('@')) {
+      emailEl.classList.add('invalid'); emailErr.classList.add('visible'); valid = false;
+    }
+    if (!passEl.value) {
+      passEl.classList.add('invalid'); passErr.classList.add('visible'); valid = false;
+    }
+    if (!valid) return;
+
+    const btn = document.getElementById('login-btn');
+    btn.disabled = true; btn.textContent = 'Signing in…';
+
+    try {
+      await signInWithEmailAndPassword(auth, emailEl.value.trim(), passEl.value);
+      /* onAuthStateChanged above handles the rest */
+    } catch (err) {
+      /*
+        Firebase auth error codes:
+          auth/user-not-found     → wrong email
+          auth/wrong-password     → wrong password
+          auth/invalid-credential → covers both in newer SDK
+          auth/too-many-requests  → brute force protection
+      */
+      const MESSAGES = {
+        'auth/invalid-credential': 'Incorrect email or password. Please try again.',
+        'auth/user-not-found':     'No account found with this email.',
+        'auth/wrong-password':     'Incorrect password. Please try again.',
+        'auth/too-many-requests':  'Too many failed attempts. Please wait a few minutes.',
+        'auth/network-request-failed': 'Network error. Check your connection.',
+      };
+      loginErr.textContent = MESSAGES[err.code] || `Login failed: ${err.message}`;
+      loginErr.style.display = 'block';
+    } finally {
+      btn.disabled = false; btn.textContent = 'Sign In';
+    }
+  });
+
+  /* Allow Enter key on password field */
+  document.getElementById('login-password').addEventListener('keydown', e => {
+    if (e.key === 'Enter') document.getElementById('login-btn').click();
+  });
+
+  /* ── Logout ───────────────────────────────────────────────── */
+  document.getElementById('logout-btn').addEventListener('click', async () => {
+    await signOut(auth);
+    toast('Signed out successfully.');
+  });
+
+  /* ════════════════════════════════════════════════════════════
+     IMAGE PREVIEW
+     Live preview as the admin types or pastes an image URL
+  ════════════════════════════════════════════════════════════ */
+  const imgInput   = document.getElementById('p-image');
+  const imgPreview = document.getElementById('img-preview');
+
+  imgInput.addEventListener('input', () => {
+    const url = driveUrl(imgInput.value.trim());
+    if (url) {
+      imgPreview.src          = url;
+      imgPreview.style.display = 'block';
+      imgPreview.onerror      = () => { imgPreview.style.display = 'none'; };
+    } else {
+      imgPreview.style.display = 'none';
+    }
+  });
+
+  /* ════════════════════════════════════════════════════════════
+     ADD PRODUCT
+     ──────────────────────────────────────────────────────────
+     Only authenticated admins can reach this code path —
+     Firestore rules enforce this server-side regardless.
+  ════════════════════════════════════════════════════════════ */
+  document.getElementById('product-form').addEventListener('submit', async e => {
+    e.preventDefault();
+
+    const nameEl = document.getElementById('p-name');
+    const catEl  = document.getElementById('p-category');
+    const nameErr = document.getElementById('name-error');
+    const catErr  = document.getElementById('cat-error');
+
+    /* Reset validation */
+    [nameEl, catEl].forEach(el => el.classList.remove('invalid'));
+    [nameErr, catErr].forEach(el => el.classList.remove('visible'));
+
+    const name     = nameEl.value.trim();
+    const price    = document.getElementById('p-price').value.trim();
+    const category = catEl.value;
+    const desc     = document.getElementById('p-desc').value.trim();
+    const imageRaw = imgInput.value.trim();
+    const image    = driveUrl(imageRaw) || imageRaw;
+
+    /* Client-side validation */
+    let valid = true;
+    if (!name)     { nameEl.classList.add('invalid'); nameErr.classList.add('visible'); valid = false; }
+    if (!category) { catEl.classList.add('invalid');  catErr.classList.add('visible');  valid = false; }
+    if (!valid) return;
+
+    const btn = document.getElementById('submit-btn');
+    btn.disabled    = true;
+    btn.textContent = 'Adding…';
+
+    try {
+      /*
+        addDoc() will FAIL with permission-denied if:
+          - The user is not authenticated
+          - The Firestore rules don't allow writes
+        This is the server-side security layer.
+      */
+      await addDoc(collection(db, 'products'), {
+        name,
+        price,
+        category,
+        desc,
+        image,
+        createdAt: serverTimestamp()
+      });
+
+      toast('Product added successfully!', 'success');
+
+      /* Reset form */
+      document.getElementById('product-form').reset();
+      imgPreview.style.display = 'none';
+
+      /* Reload list */
+      loadProducts();
+
+    } catch (err) {
+      if (err.code === 'permission-denied') {
+        toast('Permission denied. Check your Firestore rules.', 'error');
+        console.error('[NOVIA Admin] Firestore rules blocked the write. Deploy firestore.rules.');
+      } else {
+        toast('Error: ' + err.message, 'error');
+      }
+    } finally {
+      btn.disabled    = false;
+      btn.textContent = 'Add Product';
+    }
+  });
+
+  /* ════════════════════════════════════════════════════════════
+     LOAD PRODUCTS LIST
+  ════════════════════════════════════════════════════════════ */
+  const listEl   = document.getElementById('product-list');
+  const countEl  = document.getElementById('product-count');
+
+  async function loadProducts() {
+    listEl.innerHTML = '<div class="row-skeleton"></div><div class="row-skeleton"></div><div class="row-skeleton"></div>';
+
+    try {
+      const q    = query(collection(db, 'products'), orderBy('createdAt', 'desc'));
+      const snap = await getDocs(q);
+
+      countEl.textContent = `${snap.size} product${snap.size !== 1 ? 's' : ''}`;
+
+      if (snap.empty) {
+        listEl.innerHTML = `<div class="list-empty"><p>No products yet. Add your first item.</p></div>`;
+        return;
+      }
+
+      listEl.innerHTML = '';
+      snap.docs.forEach(docSnap => {
+        const p      = { id: docSnap.id, ...docSnap.data() };
+        const imgSrc = p.image || '';
+        const row    = document.createElement('div');
+        row.className = 'product-row';
+        row.innerHTML = `
+          <img class="product-row-img" src="${imgSrc}" alt="${p.name}"
+               onerror="this.src='https://images.unsplash.com/photo-1465495976277-4387d4b0b4c6?w=200&q=60';this.onerror=null" />
+          <div>
+            <p class="product-row-name">${p.name}</p>
+            <p class="product-row-meta">${p.price || 'No price set'}</p>
+            <span class="product-row-cat">${CAT_LABEL[p.category] || p.category}</span>
+          </div>
+          <button class="btn-delete" aria-label="Delete ${p.name}">Delete</button>`;
+
+        row.querySelector('.btn-delete').addEventListener('click', () => deleteProduct(p.id, p.name));
+        listEl.appendChild(row);
+      });
+
+    } catch (err) {
+      countEl.textContent = 'Error';
+      listEl.innerHTML = `
+        <div class="list-error">
+          <p>Could not load products.<br>
+          ${err.code === 'permission-denied'
+            ? 'Firestore rules are blocking reads. Deploy firestore.rules first.'
+            : err.message}</p>
+        </div>`;
+      console.error('[NOVIA Admin] loadProducts error:', err);
+    }
+  }
+
+  /* ════════════════════════════════════════════════════════════
+     DELETE PRODUCT
+  ════════════════════════════════════════════════════════════ */
+  async function deleteProduct(id, name) {
+    if (!confirm(`Delete "${name}"?\nThis cannot be undone.`)) return;
+    try {
+      await deleteDoc(doc(db, 'products', id));
+      toast(`"${name}" deleted.`);
+      loadProducts();
+    } catch (err) {
+      if (err.code === 'permission-denied') {
+        toast('Permission denied — check Firestore rules.', 'error');
+      } else {
+        toast('Delete failed: ' + err.message, 'error');
+      }
+    }
+  }
+</script>
+</body>
+</html>
