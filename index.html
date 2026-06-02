@@ -180,7 +180,11 @@
 
     /* PRODUCT CARD */
     .product-card { cursor: pointer; }
-    .card-image { position: relative; aspect-ratio: 3/4; overflow: hidden; margin-bottom: 1rem; background: var(--cream); }
+    .card-image {
+      position: relative; aspect-ratio: 3/4; overflow: hidden;
+      margin-bottom: 1rem; background: var(--cream);
+      cursor: zoom-in; /* hints the image opens larger */
+    }
     .card-image img { width:100%; height:100%; object-fit:cover; transition: transform 0.6s ease; display: block; }
     .product-card:hover .card-image img { transform: scale(1.05); }
 
@@ -243,7 +247,16 @@
       transform: scale(0.95); transition: transform 0.3s ease;
     }
     #lightbox.open .lb-inner { transform: scale(1); }
-    .lb-img { width: 42%; object-fit: cover; display: block; flex-shrink: 0; }
+    /* Lightbox image — show FULL image (no cropping) on a dark backdrop */
+    .lb-img {
+      width: 50%;
+      max-height: 80vh;
+      object-fit: contain;   /* CHANGED from cover → shows entire image */
+      background: #1a1714;   /* dark frame so any aspect ratio looks intentional */
+      display: block;
+      flex-shrink: 0;
+      cursor: zoom-in;       /* hints that clicking opens full size */
+    }
     .lb-details { flex:1; padding:2.5rem; display:flex; flex-direction:column; justify-content:center; overflow-y:auto; }
     .lb-close {
       position: absolute; top: 0.8rem; right: 0.8rem;
@@ -374,7 +387,13 @@
         -webkit-overflow-scrolling: touch;
       }
       #lightbox.open .lb-inner { transform: translateY(0); }
-      .lb-img { width: 100%; height: 48vw; max-height: 240px; }
+      .lb-img {
+        width: 100%;
+        height: auto;
+        max-height: 55vh;
+        object-fit: contain;
+        background: #1a1714;
+      }
       .lb-details { padding: 1.4rem 1.25rem 2rem; }
 
       /* WhatsApp button in lightbox — full width, easy tap */
@@ -743,14 +762,17 @@ function renderProducts(filter) {
     imgFallback(card.querySelector('img'));
 
     /*
-     * Quick View click handler.
-     * stopPropagation prevents the card's own click from firing too.
-     * touch-action:manipulation (CSS) removes the 300 ms iOS delay.
+     * Open lightbox on click of:
+     *  - the Quick View button
+     *  - anywhere on the product image
+     * (The WhatsApp link below is excluded because <a> handles its own click.)
      */
-    card.querySelector('.quick-view-btn').addEventListener('click', function (e) {
+    function openCardLightbox(e) {
       e.stopPropagation();
       openLightbox(p);
-    });
+    }
+    card.querySelector('.quick-view-btn').addEventListener('click', openCardLightbox);
+    card.querySelector('.card-image').addEventListener('click', openCardLightbox);
 
     grid.appendChild(card);
     fadeObserver.observe(card);
@@ -787,6 +809,11 @@ function renderProducts(filter) {
     lbDesc.textContent  = p.desc  || '';
     lbWa.href = 'https://wa.me/201061858848?text=' +
       encodeURIComponent('Hello, I would like to order: ' + p.name);
+
+    /* Click the lightbox image → open full original in a new tab */
+    lbImg.onclick = function () {
+      if (src) window.open(src, '_blank', 'noopener');
+    };
 
     lb.classList.add('open');
     document.body.style.overflow = 'hidden'; /* prevent background scroll on mobile */
