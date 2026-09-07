@@ -4,10 +4,12 @@
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>NOVIA — Luxury Handmade Bridal</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com"/>
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
-  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;0,600;1,300;1,400&family=Jost:wght@200;300;400&display=swap" rel="stylesheet"/>
-  <style>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;0,600;1,300;1,400&family=Jost:wght@200;300;400&family=Amiri:ital,wght@0,400;0,700;1,400;1,700&display=swap" rel="stylesheet">
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Jost:wght@300;400;500&family=Noto+Kufi+Arabic:wght@400;500&display=swap" rel="stylesheet">
+<style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     :root {
       --ivory: #fdf6f0; --cream: #f7ede4; --blush: #eecfc0;
@@ -693,11 +695,54 @@
       .footer-top { grid-template-columns: 1fr; gap: 2rem; }
       .footer-bottom { flex-direction: column; align-items: flex-start; }
     }
+/* ── ARABIC TESTIMONIALS ── */
 
+#testimonials .test-grid {
+    direction: ltr;
+}
+
+#testimonials .test-card {
+    direction: rtl;
+    text-align: right;
+}
+
+#testimonials .test-quote {
+    font-family: 'Amiri', 'Noto Kufi Arabic', serif;
+    font-size: 1.05rem;
+    font-weight: 400;
+    font-style: italic;
+    line-height: 2.1;
+    letter-spacing: 0.01em;
+    direction: rtl;
+    text-align: right;
+    color: rgba(255,255,255,0.82);
+    margin-bottom: 1.5rem;
+}
+
+#testimonials .test-author {
+    font-family: var(--sans);
+    direction: ltr;
+    text-align: right;
+    font-size: 0.6rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+}
+
+#testimonials .stars {
+    direction: ltr;
+    text-align: left;
+}
+
+@media (max-width: 768px) {
+    #testimonials .test-quote {
+        font-size: 0.88rem;
+        line-height: 2;
+    }
+}
     @media (max-width: 400px) {
       .products-grid { grid-template-columns: repeat(2,1fr); gap: 0.6rem; }
       .hero-title { letter-spacing: 0.08em; }
-    }
+
   </style>
 </head>
 <body>
@@ -789,15 +834,45 @@
 </div>
 
 <!-- Testimonials -->
+
 <section id="testimonials">
+
   <p class="section-eyebrow test-eyebrow fade-in">Love Notes</p>
-  <h2 class="section-title fade-in" style="color:#fff">What Brides Are Saying</h2>
+
+  <h2 class="section-title fade-in" style="color:#fff">
+    What Our Customers Are Saying
+  </h2>
+
   <div class="test-grid">
-    <div class="test-card fade-in"><div class="stars">★★★★★</div><p class="test-quote">"My bridal bouquet was absolutely breathtaking. Every single rose was perfect. NOVIA made my dream wedding a reality."</p><p class="test-author">— Sara M., Cairo</p></div>
-    <div class="test-card fade-in"><div class="stars">★★★★★</div><p class="test-quote">"The personalized bridal box was the most thoughtful gift. My bridesmaids cried when they opened them."</p><p class="test-author">— Layla R., Alexandria</p></div>
-    <div class="test-card fade-in"><div class="stars">★★★★★</div><p class="test-quote">"From the flower crown to the mirror set, every detail was exquisite. NOVIA understands what luxury truly means."</p><p class="test-author">— Nour K., Dubai</p></div>
+
+<div class="test-card fade-in">
+  <div class="stars">★★★★★</div>
+  <p class="test-quote">
+    حقيقي مش عارفة أشكركم إزاي، الحاجة طلعت زي ما أنا عايزاها بالظبط وزي الصور بالظبط، سيمبل ورقيقة موت. كل ما أبصلهم بحبهم أكتر. حقيقي شكرًا إنكم فرحتوني، تسلم إيديكم، الحاجة كانت تحفة تحفة.
+  </p>
+  <p class="test-author">— Jessica</p>
+</div>
+
+<div class="test-card fade-in">
+  <div class="stars">★★★★★</div>
+  <p class="test-quote">
+الحاجات بجد تحفه اووي بجد تسلم ايديكي حقيقي انتي اشطر حد في مجال وعجبوني جداً بجد انتي مبدعه
+  </p>
+  <p class="test-author">— Dody</p>
+</div>
+
+<div class="test-card fade-in">
+  <div class="stars">★★★★★</div>
+  <p class="test-quote">
+    وبعد ما أخدنا الثقة فيكم في البوكيه الأول، البوكيه التاني كان أحلى وأحلى. وكل مرة بتأكدوا إن الشياكة والجودة عندكم حاجة ثابتة. والبوكيه طلع متقفل باحترافية ولونه تحفة بجد. واضح إنكم بتشتغلوا بذوق عالي، وده اللي بيخلينا نرجع لكم بثقة كل مرة. تسلم إيديكم، والبوكيه كان تحفة كالعادة.
+  </p>
+  <p class="test-author">— Gerges</p>
+</div>
+
   </div>
+
 </section>
+
 
 <!-- Footer -->
 <footer>
